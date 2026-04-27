@@ -1,0 +1,16 @@
+# Logs e IDEs
+.idea/
+.vscode/
+*.log
+
+# Entornos Virtuales de Python (para cuando hagamos el dressme-ai)
+venv/
+__pycache__/
+
+# Node modules (para el frontend)
+node_modules/
+dist/
+
+# Java compilados
+target/
+*.class
