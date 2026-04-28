@@ -10,12 +10,14 @@ import com.dressme.dressme_database.repository.UserRepository;
 import com.dressme.dressme_database.repository.UserTasteProfileRepository;
 import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
 import com.dressme.dressme_database.schema.dto.UserProfileResponse;
+import com.dressme.dressme_database.schema.dto.UserResponseDTO;
 import com.dressme.dressme_database.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -78,5 +80,26 @@ public class UserServiceImpl implements UserService {
                 user.getProfilePicture(),
                 false // isCalibrated por defecto en false durante el registro (Cold Start)
         );
+    }
+
+    @Override
+    public UserResponseDTO getUserProfile(UUID userId) {
+        // 1. Buscamos al usuario base. Si no existe, lanzamos error 404
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + userId));
+
+        // 2. Buscamos su estado de calibración en la otra tabla
+        boolean calibrated = userTasteProfileRepository.findByUserId(userId)
+                .map(UserTasteProfile::isCalibrated)
+                .orElse(false);
+
+        // 3. Construimos el DTO de salida
+        return UserResponseDTO.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .name(user.getDisplayName())
+                .pictureUrl(user.getProfilePicture())
+                .isCalibrated(calibrated)
+                .build();
     }
 }

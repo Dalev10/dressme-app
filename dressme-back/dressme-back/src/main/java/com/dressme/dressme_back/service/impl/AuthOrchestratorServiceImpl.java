@@ -3,13 +3,18 @@ package com.dressme.dressme_back.service.impl;
 import com.dressme.dressme_back.schema.dto.InternalUserCreateRequest;
 import com.dressme.dressme_back.schema.dto.StandardizedUserProviderInfo;
 import com.dressme.dressme_back.schema.dto.UserProfileResponse;
+import com.dressme.dressme_back.schema.dto.UserResponseDTO;
 import com.dressme.dressme_back.service.AuthOrchestratorService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.Arrays;
+import java.util.UUID;
 
 @Service
+@Slf4j
 public class AuthOrchestratorServiceImpl implements AuthOrchestratorService {
 
     private final RestClient restClient;
@@ -44,5 +49,15 @@ public class AuthOrchestratorServiceImpl implements AuthOrchestratorService {
                 .body(dbRequest)
                 .retrieve()
                 .body(UserProfileResponse.class);
+    }
+
+    @Override
+    public UserResponseDTO getUserProfile(UUID userId) {
+        log.info("Back-Orquestador: Solicitando perfil a Database para ID: {}", userId);
+        
+        return restClient.get()
+                .uri("/internal/users/{id}", userId)
+                .retrieve()
+                .body(UserResponseDTO.class);
     }
 }
