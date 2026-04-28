@@ -1,7 +1,5 @@
 package com.dressme.dressme_database.service.impl;
 
-import com.dressme.dressme_database.schemas.dto.InternalUserCreateRequest;
-import com.dressme.dressme_database.schemas.dto.UserProfileResponse;
 import com.dressme.dressme_database.model.Provider;
 import com.dressme.dressme_database.model.User;
 import com.dressme.dressme_database.model.UserIdentity;
@@ -10,6 +8,8 @@ import com.dressme.dressme_database.repository.ProviderRepository;
 import com.dressme.dressme_database.repository.UserIdentityRepository;
 import com.dressme.dressme_database.repository.UserRepository;
 import com.dressme.dressme_database.repository.UserTasteProfileRepository;
+import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
+import com.dressme.dressme_database.schema.dto.UserProfileResponse;
 import com.dressme.dressme_database.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

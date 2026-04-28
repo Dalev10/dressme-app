@@ -1,7 +1,7 @@
 package com.dressme.dressme_database.controller;
 
-import com.dressme.dressme_database.schemas.dto.InternalUserCreateRequest;
-import com.dressme.dressme_database.schemas.dto.UserProfileResponse;
+import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
+import com.dressme.dressme_database.schema.dto.UserProfileResponse;
 import com.dressme.dressme_database.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

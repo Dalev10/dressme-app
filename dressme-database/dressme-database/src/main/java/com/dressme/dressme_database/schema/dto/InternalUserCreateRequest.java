@@ -1,4 +1,4 @@
-package com.dressme.dressme_database.schemas.dto;
+package com.dressme.dressme_database.schema.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
