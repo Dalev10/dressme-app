@@ -1,7 +1,7 @@
 name: dressme-app
 
 services:
-  # 1. Base de Datos con pgvector
+  # 1. Base de Datos Local con pgvector
   dressme-db:
     image: ankane/pgvector:latest
     container_name: dressme-db
@@ -21,11 +21,12 @@ services:
   dressme-database:
     build: 
       context: ./dressme-database/dressme-database
+      dockerfile: Dockerfile # <-- Apunta explícitamente al local
     container_name: dressme-database
     ports:
       - "8082:8080"
     depends_on:
-      - dressme-db # <-- CORREGIDO: Ahora coincide con el nombre de arriba
+      - dressme-db
     networks:
       - dressme-network
 
@@ -33,6 +34,7 @@ services:
   dressme-back:
     build: 
       context: ./dressme-back/dressme-back
+      dockerfile: Dockerfile # <-- Apunta explícitamente al local
     container_name: dressme-back
     ports:
       - "8081:8080"
@@ -45,6 +47,7 @@ services:
   dressme-gateway:
     build: 
       context: ./dressme-gateway/dressme-gateway
+      dockerfile: Dockerfile # <-- Apunta explícitamente al local
     container_name: dressme-gateway
     ports:
       - "8080:8080"
