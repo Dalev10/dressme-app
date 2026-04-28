@@ -1,5 +1,7 @@
 package com.dressme.dressme_gateway.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,8 +19,13 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // LÍNEA DE ORO: Si no ves esto en el log de Docker, la config no existe para Spring
+        log.info("********** GATEWAY: CARGANDO CONFIGURACIÓN DE SEGURIDAD PERSONALIZADA **********");
+        
         http
             // 1. Deshabilitar CSRF: Esencial para APIs REST que no usan cookies de sesión,
             // evitando que Spring Security bloquee los POST/PUT.
@@ -46,8 +53,7 @@ public class SecurityConfig {
                 // Permitir el flujo de Login con Google
                 .requestMatchers("/api/v1/auth/login").permitAll()
                 
-                // INTEGRIDAD: Permitir el acceso al perfil de usuario para pruebas del MVP.
-                // Esta es la línea que permite que el puerto 8080 responda tu consulta.
+                // Simplificamos los matchers para descartar errores de HttpMethod
                 .requestMatchers("/api/v1/users/profile/**").permitAll() 
                 
                 // --- RUTAS PROTEGIDAS ---

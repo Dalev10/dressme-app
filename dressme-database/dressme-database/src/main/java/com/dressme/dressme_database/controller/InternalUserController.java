@@ -3,6 +3,7 @@ package com.dressme.dressme_database.controller;
 import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
 import com.dressme.dressme_database.schema.dto.UserProfileResponse;
 import com.dressme.dressme_database.schema.dto.UserResponseDTO;
+import com.dressme.dressme_database.schema.dto.UserUpdateRequest;
 import com.dressme.dressme_database.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,5 +46,12 @@ public class InternalUserController {
     public ResponseEntity<UserResponseDTO> getUserById(@PathVariable UUID id) {
         log.info("Database Microservice: Consultando perfil para usuario ID: {}", id);
         return ResponseEntity.ok(userService.getUserProfile(id));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<UserResponseDTO> update(@PathVariable UUID id, @RequestBody UserUpdateRequest request) {
+        log.info("Database Controller: Recibida solicitud de actualización para usuario: {}", id);
+        UserResponseDTO response = userService.updateUserProfile(id, request);
+        return ResponseEntity.ok(response);
     }
 }

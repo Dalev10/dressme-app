@@ -1,4 +1,4 @@
-package com.dressme.dressme_database.schema.dto; 
+package com.dressme.dressme_back.schema.dto; 
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;

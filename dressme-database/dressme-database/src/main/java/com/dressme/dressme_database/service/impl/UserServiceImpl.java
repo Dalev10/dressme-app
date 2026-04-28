@@ -11,8 +11,10 @@ import com.dressme.dressme_database.repository.UserTasteProfileRepository;
 import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
 import com.dressme.dressme_database.schema.dto.UserProfileResponse;
 import com.dressme.dressme_database.schema.dto.UserResponseDTO;
+import com.dressme.dressme_database.schema.dto.UserUpdateRequest;
 import com.dressme.dressme_database.service.UserService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
@@ -97,9 +100,42 @@ public class UserServiceImpl implements UserService {
         return UserResponseDTO.builder()
                 .id(user.getId())
                 .email(user.getEmail())
-                .name(user.getDisplayName())
-                .pictureUrl(user.getProfilePicture())
+                .displayName(user.getDisplayName())
+                .profilePicture(user.getProfilePicture())
                 .isCalibrated(calibrated)
                 .build();
+    }
+
+    @Override
+    @Transactional // CRUCIAL: Garantiza que se actualicen ambas tablas o ninguna
+    public UserResponseDTO updateUserProfile(UUID userId, UserUpdateRequest request) {
+        log.info("Database Service: Iniciando actualización para usuario ID: {}", userId);
+
+        // 1. Buscar y actualizar Entidad User (tbl_users)
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        if (request.getDisplayName() != null) {
+            user.setDisplayName(request.getDisplayName());
+        }
+        if (request.getProfilePicture() != null) {
+            user.setProfilePicture(request.getProfilePicture());
+        }
+        userRepository.save(user);
+
+        // 2. Buscar y actualizar Entidad UserTasteProfile (tbl_user_taste_profile)
+        userTasteProfileRepository.findByUserId(userId).ifPresent(profile -> {
+            if (request.getIsCalibrated() != null) {
+                profile.setCalibrated(request.getIsCalibrated());
+            }
+            if (request.getTasteVector() != null) {
+                profile.setTasteVector(request.getTasteVector());
+            }
+            profile.setLastUpdated(java.time.LocalDateTime.now());
+            userTasteProfileRepository.save(profile);
+        });
+
+        // 3. Reutilizamos el método GET funcional para retornar el estado final íntegro
+        return getUserProfile(userId);
     }
 }

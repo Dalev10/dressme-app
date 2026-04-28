@@ -4,8 +4,10 @@ import com.dressme.dressme_back.schema.dto.InternalUserCreateRequest;
 import com.dressme.dressme_back.schema.dto.StandardizedUserProviderInfo;
 import com.dressme.dressme_back.schema.dto.UserProfileResponse;
 import com.dressme.dressme_back.schema.dto.UserResponseDTO;
+import com.dressme.dressme_back.schema.dto.UserUpdateRequest;
 import com.dressme.dressme_back.service.AuthOrchestratorService;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -58,6 +60,20 @@ public class AuthOrchestratorServiceImpl implements AuthOrchestratorService {
         return restClient.get()
                 .uri("/internal/users/{id}", userId)
                 .retrieve()
+                .body(UserResponseDTO.class);
+    }
+
+    @Override
+    public UserResponseDTO updateProfile(UUID userId, UserUpdateRequest request) {
+        log.info("Back-Orquestador: Solicitando actualización a DB para ID: {}", userId);
+        
+        return restClient.patch()
+                .uri("/internal/users/{id}", userId)
+                .body(request) // Enviamos el DTO de actualización
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    throw new RuntimeException("Error en la validación de actualización (DB)");
+                })
                 .body(UserResponseDTO.class);
     }
 }

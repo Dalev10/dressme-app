@@ -14,8 +14,8 @@ import java.util.UUID;
 public class UserResponseDTO {
     private UUID id;
     private String email;
-    private String name;
-    private String pictureUrl;
+    private String displayName;    
+    private String profilePicture;
 
     @JsonProperty("isCalibrated") // Forzamos el nombre exacto en el JSON
     private boolean isCalibrated; 

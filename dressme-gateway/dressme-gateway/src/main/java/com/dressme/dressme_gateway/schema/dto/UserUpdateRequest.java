@@ -1,4 +1,4 @@
-package com.dressme.dressme_database.schema.dto; 
+package com.dressme.dressme_gateway.schema.dto; // Ajusta el paquete según el servicio
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
