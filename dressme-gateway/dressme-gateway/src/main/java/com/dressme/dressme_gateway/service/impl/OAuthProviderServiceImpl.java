@@ -1,9 +1,9 @@
 package com.dressme.dressme_gateway.service.impl;
 
-import com.dressme.dressme_gateway.schemas.dto.GoogleUserInfoResponse;
-import com.dressme.dressme_gateway.schemas.dto.OAuthLoginRequest;
-import com.dressme.dressme_gateway.schemas.dto.StandardizedUserProviderInfo;
 import com.dressme.dressme_gateway.infra.exception.InvalidOAuthTokenException;
+import com.dressme.dressme_gateway.schema.dto.GoogleUserInfoResponse;
+import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
+import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
 import com.dressme.dressme_gateway.service.OAuthProviderService;
 
 import org.springframework.stereotype.Service;

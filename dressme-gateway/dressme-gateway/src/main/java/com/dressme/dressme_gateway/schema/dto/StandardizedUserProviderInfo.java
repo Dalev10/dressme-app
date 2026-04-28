@@ -1,4 +1,4 @@
-package com.dressme.dressme_gateway.schemas.dto;
+package com.dressme.dressme_gateway.schema.dto;
 
 /**
  * Contrato estandarizado que el Gateway construirá y enviará internamente 

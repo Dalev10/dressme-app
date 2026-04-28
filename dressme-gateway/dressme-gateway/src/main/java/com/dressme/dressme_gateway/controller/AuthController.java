@@ -1,7 +1,7 @@
 package com.dressme.dressme_gateway.controller;
 
-import com.dressme.dressme_gateway.schemas.dto.OAuthLoginRequest;
-import com.dressme.dressme_gateway.schemas.dto.StandardizedUserProviderInfo;
+import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
+import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
 import com.dressme.dressme_gateway.service.OAuthProviderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

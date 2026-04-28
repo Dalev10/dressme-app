@@ -1,4 +1,4 @@
-package com.dressme.dressme_gateway.schemas.dto;
+package com.dressme.dressme_gateway.schema.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
