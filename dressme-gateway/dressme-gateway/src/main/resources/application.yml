@@ -1,0 +1,8 @@
+server:
+  port: 8080 # El Gateway será nuestra puerta de entrada pública
+spring:
+  application:
+    name: dressme-gateway
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

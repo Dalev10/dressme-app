@@ -10,6 +10,7 @@ import java.util.UUID;
 @Table(name = "tbl_users")
 @Getter
 @Setter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder

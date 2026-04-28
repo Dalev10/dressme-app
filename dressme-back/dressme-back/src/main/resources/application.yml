@@ -1,0 +1,16 @@
+server:
+  port: 8080 # Internamente en Docker escuchará en el 8080
+
+spring:
+  application:
+    name: dressme-back
+
+# Añadimos la ruta para que el Back sepa dónde está el microservicio de Database
+# El nombre 'dressme-database' viene del nombre del servicio en docker-compose
+app:
+  services:
+    database-url: http://dressme-database:8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
