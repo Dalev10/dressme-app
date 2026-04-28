@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -53,8 +54,10 @@ public class SecurityConfig {
                 // Permitir el flujo de Login con Google
                 .requestMatchers("/api/v1/auth/login").permitAll()
                 
-                // Simplificamos los matchers para descartar errores de HttpMethod
-                .requestMatchers("/api/v1/users/profile/**").permitAll() 
+                // Permitir GET, PATCH y DELETE en el perfil de usuario para el MVP
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/profile/**").permitAll()
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/users/profile/**").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/users/profile/**").permitAll() 
                 
                 // --- RUTAS PROTEGIDAS ---
                 

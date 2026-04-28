@@ -11,4 +11,5 @@ public interface AuthOrchestratorService {
     UserProfileResponse orchestrateLogin(StandardizedUserProviderInfo providerInfo);
     UserResponseDTO getUserProfile(UUID userId);
     UserResponseDTO updateProfile(UUID userId, UserUpdateRequest request);
+    void deleteProfile(UUID userId);
 }

@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface UserIdentityRepository extends JpaRepository<UserIdentity, UUID> {
     // La consulta clave para el registro por OAuth - busca por la entidad Provider
     Optional<UserIdentity> findByProviderAndProviderUserId(Provider provider, String providerUserId);
+    void deleteByUserId(UUID userId);
 }

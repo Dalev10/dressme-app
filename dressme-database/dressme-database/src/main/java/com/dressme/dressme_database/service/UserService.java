@@ -11,4 +11,5 @@ public interface UserService {
     UserProfileResponse createUserFromOAuth(InternalUserCreateRequest request);
     UserResponseDTO getUserProfile(UUID userId);
     UserResponseDTO updateUserProfile(UUID userId, UserUpdateRequest request);
+    void deleteUser(UUID userId);
 }

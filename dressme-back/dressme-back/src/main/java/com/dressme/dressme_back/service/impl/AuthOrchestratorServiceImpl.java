@@ -76,4 +76,17 @@ public class AuthOrchestratorServiceImpl implements AuthOrchestratorService {
                 })
                 .body(UserResponseDTO.class);
     }
+
+    @Override
+    public void deleteProfile(UUID userId) {
+        log.info("Back-Orquestador: Solicitando eliminación total a Database para ID: {}", userId);
+
+        restClient.delete()
+                .uri("/internal/users/{id}", userId)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    throw new RuntimeException("Error al intentar eliminar el recurso en Database");
+                })
+                .toBodilessEntity(); // No esperamos cuerpo de respuesta
+    }
 }

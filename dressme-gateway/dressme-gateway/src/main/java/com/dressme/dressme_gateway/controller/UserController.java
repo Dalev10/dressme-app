@@ -8,6 +8,7 @@ import com.dressme.dressme_gateway.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,5 +45,12 @@ public class UserController {
                 id, request.getDisplayName(), request.getIsCalibrated());
                 
         return ResponseEntity.ok(userService.updateUserProfile(id, request));
+    }
+
+    @DeleteMapping("/profile/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        log.info("Gateway-Controller: Ejecutando DELETE público para usuario: {}", id);
+        userService.deleteUserProfile(id);
+        return ResponseEntity.noContent().build();
     }
 }

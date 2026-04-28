@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -57,5 +58,12 @@ public class InternalOrchestratorController {
             @RequestBody UserUpdateRequest request) {
         log.info("Back-Controller: Recibida petición de actualización para ID: {}", id);
         return ResponseEntity.ok(orchestratorService.updateProfile(id, request));
+    }
+
+    @DeleteMapping("/profile/{id}")
+    public ResponseEntity<Void> deleteProfile(@PathVariable UUID id) {
+        log.info("Back-Controller: Orden de eliminación recibida para ID: {}", id);
+        orchestratorService.deleteProfile(id);
+        return ResponseEntity.noContent().build();
     }
 }

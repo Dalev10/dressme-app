@@ -37,4 +37,13 @@ public class UserService {
                 .retrieve()
                 .body(UserResponseDTO.class);
     }
+
+    public void deleteUserProfile(UUID userId) {
+        log.info("Gateway-Service: Comunicando baja de usuario al Back para ID: {}", userId);
+        
+        restClient.delete()
+                .uri("http://dressme-back:8080/internal/orchestrate/profile/{id}", userId)
+                .retrieve()
+                .toBodilessEntity();
+    }
 }

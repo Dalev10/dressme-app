@@ -138,4 +138,28 @@ public class UserServiceImpl implements UserService {
         // 3. Reutilizamos el método GET funcional para retornar el estado final íntegro
         return getUserProfile(userId);
     }
+
+    @Override
+    @Transactional // CRÍTICO: Todo el borrado ocurre en una sola unidad de trabajo
+    public void deleteUser(UUID userId) {
+        log.info("Database Service: Iniciando ELIMINACIÓN TOTAL para ID: {}", userId);
+
+        if (!userRepository.existsById(userId)) {
+            throw new RuntimeException("Usuario no encontrado");
+        }
+
+        // 1. Borrar Perfil de Gustos (Hijo)
+        userTasteProfileRepository.findByUserId(userId).ifPresent(profile -> {
+            userTasteProfileRepository.delete(profile);
+            log.info("1/3: Perfil de gusto eliminado.");
+        });
+
+        // 2. Borrar Identidades de Auth (Hijo) - SOLUCIONA EL ERROR SQL
+        userIdentityRepository.deleteByUserId(userId);
+        log.info("2/3: Identidades externas (Google) eliminadas.");
+
+        // 3. Borrar el Usuario (Padre)
+        userRepository.deleteById(userId);
+        log.info("3/3: Registro maestro tbl_users eliminado. Proceso completo.");
+    }
 }
