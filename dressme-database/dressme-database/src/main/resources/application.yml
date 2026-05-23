@@ -4,7 +4,7 @@ spring:
   application:
     name: dressme-database
   datasource:
-    url: jdbc:postgresql://localhost:5434/dressmedb
+    url: jdbc:postgresql://dressme-db:5432/dressmedb 
     username: user_admin
     password: password123
   jpa:
