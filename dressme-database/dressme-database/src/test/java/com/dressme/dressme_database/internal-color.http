@@ -1,0 +1,13 @@
+### 1. Obtener color complementario
+# Reemplaza {uuid-real} con el ID de un color NO neutral de tu DB
+GET http://localhost:8082/internal/colors/22222222-0000-0000-0000-000000000009/complementary
+Accept: application/json
+
+### 2. Obtener colores análogos
+GET http://localhost:8082/internal/colors/22222222-0000-0000-0000-000000000009/analogous
+Accept: application/json
+
+### 3. Probar el manejador de errores global (404 Not Found)
+# Aquí usamos un UUID inventado a propósito para forzar el error
+GET http://localhost:8082/internal/colors/123e4567-e89b-12d3-a456-426614174000/complementary
+Accept: application/json
