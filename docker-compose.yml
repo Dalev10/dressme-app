@@ -11,6 +11,9 @@ services:
     env_file:
     - .env
     environment:
+      POSTGRES_DB: dressmedb
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -30,6 +33,12 @@ services:
     - .env  
     ports:
       - "8082:8080"
+    environment:
+      DB_HOST: dressme-db
+      DB_PORT: 5432
+      DB_NAME: dressmedb
+      DB_USER: user_admin
+      DB_PASS: password123
     depends_on:
       - dressme-db
     networks:

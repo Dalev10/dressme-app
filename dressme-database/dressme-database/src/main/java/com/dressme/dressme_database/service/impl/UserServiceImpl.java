@@ -67,6 +67,8 @@ public class UserServiceImpl implements UserService {
         UserTasteProfile tasteProfile = UserTasteProfile.builder()
                 .user(newUser)
                 .tasteVector(request.initialTasteVector())
+                .sourceType("COLD_START")
+                .isCalibrated(false)
                 .build();
         userTasteProfileRepository.save(tasteProfile);
 
