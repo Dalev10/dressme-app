@@ -10,7 +10,6 @@ import com.dressme.dressme_database.util.ColorTheoryUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
