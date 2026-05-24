@@ -9,9 +9,9 @@ services:
     ports:
       - "5434:5432"
     environment:
-      POSTGRES_DB: ${DB_HOST}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: dressmedb
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: password123
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
@@ -26,6 +26,12 @@ services:
     container_name: dressme-database
     ports:
       - "8082:8080"
+    environment:
+      DB_HOST: dressme-db
+      DB_PORT: 5432
+      DB_NAME: dressmedb
+      DB_USER: user_admin
+      DB_PASS: password123
     depends_on:
       - dressme-db
     networks:
