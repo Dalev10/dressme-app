@@ -355,6 +355,46 @@ public class AppConfig {
 
 === Módulo Java: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java ===
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ColorCompatibility.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_color_compatibility")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ColorCompatibility {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne
+    @JoinColumn(name = "color_a_id", nullable = false)
+    private Color colorA;
+
+    @ManyToOne
+    @JoinColumn(name = "color_b_id", nullable = false)
+    private Color colorB;
+
+    @Column(name = "compatibility_score", nullable = false)
+    private Double compatibilityScore;
+
+    @Column(name = "created_at", updatable = false)
+    @Builder.Default
+    private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
+}
+
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/User.java
 
 package com.dressme.dressme_database.model;
@@ -988,13 +1028,20 @@ public class Color {
     @Column(unique = true, nullable = false, length = 50)
     private String name;
 
-    @Column(name = "hex_code", unique = true, nullable = false, length = 7)
-    private String hexCode; // Ejemplo: #FF5733
+    @Column(nullable = false)
+    private Integer hue;
+
+    @Column(nullable = false)
+    private Integer saturation;
+
+    @Column(nullable = false)
+    private Integer lightness;
 
     @Builder.Default
     @Column(name = "is_neutral")
     private boolean isNeutral = false;
 }
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingColor.java
@@ -1164,6 +1211,89 @@ public interface UserService {
     UserResponseDTO updateUserProfile(UUID userId, UserUpdateRequest request);
     void deleteUser(UUID userId);
 }
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/ColorService.java
+
+package com.dressme.dressme_database.service;
+
+import com.dressme.dressme_database.model.Color;
+
+import java.util.List;
+
+public interface ColorService {
+    Color getComplementaryColor(Color baseColor);
+    List<Color> getAnalogousColors(Color baseColor);
+}
+
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/ColorServiceImpl.java
+
+package com.dressme.dressme_database.service.impl;
+
+import com.dressme.dressme_database.model.Color;
+import com.dressme.dressme_database.repository.ColorRepository;
+import com.dressme.dressme_database.service.ColorService;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class ColorServiceImpl implements ColorService {
+    private final ColorRepository colorRepository;
+
+    public ColorServiceImpl(ColorRepository colorRepository) {
+        this.colorRepository = colorRepository;
+    }
+
+    @Override
+    public Color getComplementaryColor(Color baseColor){
+        if (baseColor.isNeutral()) return null;
+
+        int targetHue = (baseColor.getHue() + 180) % 360;
+        List<Color> nonNeutralColors = colorRepository.findByIsNeutralFalse();
+
+        /* Margen de toleracia para encontrar un color similar en la DB
+        Ej: se busca un amarillo con Hue 65, pero en la DB tenemos
+        amarillo con Hue 60
+         */
+        final int TOLERANCE = 15;
+
+        return nonNeutralColors.stream()
+            .filter(color ->{
+            int diff = Math.abs(color.getHue() - targetHue);
+            int distance = Math.min(diff, 360 - diff);
+            return distance <= TOLERANCE;
+        })
+            .findFirst()
+            .orElse(null);
+    }
+
+    @Override
+    public List<Color> getAnalogousColors(Color baseColor){
+        if (baseColor.isNeutral()) return new ArrayList<>();
+        int upperAnalogousHue = (baseColor.getHue() + 30) % 360;
+        int lowerAnalogousHue = (baseColor.getHue() - 30 + 360) % 360;
+
+        final int TOLERANCE = 15;
+
+        List<Color> nonNeutralColors = colorRepository.findByIsNeutralFalse();
+
+        return nonNeutralColors.stream()
+            .filter(color -> {
+                int diffUpper = Math.abs(color.getHue() - upperAnalogousHue);
+                int distanceToUpper = Math.min(diffUpper, 360 - diffUpper);
+                int diffLower = Math.abs(color.getHue() - lowerAnalogousHue);
+                int distanceToLower = Math.min(diffLower, 360 - diffLower);
+
+                return distanceToUpper <= TOLERANCE || distanceToLower <= TOLERANCE;
+            })
+            .toList();
+    }
+}
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/UserServiceImpl.java
@@ -1436,6 +1566,23 @@ import java.util.UUID;
 public interface ProviderRepository extends JpaRepository<Provider, UUID> {
     Optional<Provider> findByName(String name);
 }
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ColorRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.Color;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface ColorRepository extends JpaRepository<Color, UUID> {
+    List<Color> findByIsNeutralFalse();
+}
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserIdentityRepository.java
