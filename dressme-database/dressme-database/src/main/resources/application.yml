@@ -12,6 +12,7 @@ spring:
     init:
       mode: always        # ← permite que data.sql corra contra PostgreSQL
   jpa:
+    defer-datasource-initialization: true
     hibernate:
       ddl-auto: update
     show-sql: true

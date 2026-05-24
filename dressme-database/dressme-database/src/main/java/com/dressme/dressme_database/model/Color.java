@@ -31,5 +31,5 @@ public class Color {
 
     @Builder.Default
     @Column(name = "is_neutral")
-    private boolean isNeutral = false;
+    private boolean neutral = false;
 }
