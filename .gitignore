@@ -21,3 +21,4 @@ target/
 # Docker
 *.pid
 *.seed
+postgres-data/
