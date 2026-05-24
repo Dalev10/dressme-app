@@ -11,6 +11,7 @@ spring:
   sql:
     init:
       mode: always        # ← permite que data.sql corra contra PostgreSQL
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update
