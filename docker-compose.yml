@@ -14,6 +14,7 @@ services:
       POSTGRES_PASSWORD: password123
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
     networks:
       - dressme-network
 
