@@ -9,9 +9,9 @@ services:
     ports:
       - "5434:5432"
     environment:
-      POSTGRES_DB: dressmedb
-      POSTGRES_USER: user_admin
-      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ${DB_HOST}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -53,6 +53,17 @@ services:
       - "8080:8080"
     depends_on:
       - dressme-back
+    networks:
+      - dressme-network
+
+  # 5. Microservicio de Inteligencia Artificial 
+  dressme-ai:
+    build: 
+      context: ./dressme-ai
+      dockerfile: Dockerfile
+    container_name: dressme-ai
+    ports:
+      - "8083:8080" 
     networks:
       - dressme-network
 
