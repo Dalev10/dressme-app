@@ -14,3 +14,10 @@ dist/
 # Java compilados
 target/
 *.class
+
+.env
+.env.*
+
+# Docker
+*.pid
+*.seed

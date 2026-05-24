@@ -1,18 +1,21 @@
 server:
   port: 8080
+
 spring:
   application:
     name: dressme-database
   datasource:
-    url: jdbc:postgresql://dressme-db:5432/dressmedb 
-    username: user_admin
-    password: password123
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASS}
   jpa:
     hibernate:
       ddl-auto: update
+    show-sql: true 
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
