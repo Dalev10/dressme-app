@@ -8,21 +8,26 @@ services:
     restart: always
     ports:
       - "5434:5432"
+    env_file:
+    - .env
     environment:
-      POSTGRES_DB: ${DB_HOST}
+      POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
     networks:
       - dressme-network
-
+      
   # 2. Microservicio de Base de Datos
   dressme-database:
     build: 
       context: ./dressme-database/dressme-database
       dockerfile: Dockerfile # <-- Apunta explícitamente al local
     container_name: dressme-database
+    env_file:
+    - .env  
     ports:
       - "8082:8080"
     depends_on:
