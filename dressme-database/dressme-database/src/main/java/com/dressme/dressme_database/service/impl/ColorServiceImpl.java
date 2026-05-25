@@ -9,6 +9,7 @@ import com.dressme.dressme_database.service.ColorService;
 import com.dressme.dressme_database.util.ColorTheoryUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import java.util.Comparator;
 
 import java.util.List;
 import java.util.UUID;
@@ -55,5 +56,18 @@ public class ColorServiceImpl implements ColorService {
             .orElseThrow(() -> new ColorNotFoundException("Color no encontrado con ID: " + id));
     }
 
+    @Override
+    public ColorResponseDTO getClosestColor(int  hue, int saturation, int lightness) {
+        List<Color> allColors = colorRepository.findAll();
+        Color closestColor = allColors.stream()
+            .min(Comparator.comparingDouble(dbColor ->
+                ColorTheoryUtils.calculateColorDistance(
+                    hue, saturation, lightness,
+                    dbColor.getHue(), dbColor.getSaturation(), dbColor.getLightness()
+                )
+            ))
+            .orElseThrow(() -> new ColorNotFoundException("No se encontraron colores en la base de datos"));
+        return colorMapper.toDto(closestColor);
+    }
 
 }

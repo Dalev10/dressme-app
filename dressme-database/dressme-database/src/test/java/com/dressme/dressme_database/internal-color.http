@@ -11,3 +11,23 @@ Accept: application/json
 # Aquí usamos un UUID inventado a propósito para forzar el error
 GET http://localhost:8082/internal/colors/123e4567-e89b-12d3-a456-426614174000/complementary
 Accept: application/json
+
+### 4. Compatibilidad - caso con score en BD
+GET http://localhost:8082/internal/colors/compatibility?hue1=0&saturation1=80&lightness1=50&hue2=180&saturation2=80&lightness2=50
+Accept: application/json
+
+### 5. Validación - hue fuera de rango (debe retornar 400)
+GET http://localhost:8082/internal/colors/compatibility?hue1=400&saturation1=70&lightness1=50&hue2=90&saturation2=70&lightness2=50
+Accept: application/json
+
+### 6. Validación - parámetro faltante (debe retornar 400)
+GET http://localhost:8082/internal/colors/compatibility?hue1=30&saturation1=70
+Accept: application/json
+
+### 7. Llamada directa al microservicio database (bypasseando el gateway)
+GET http://localhost:8082/internal/colors/22222222-0000-0000-0000-000000000009/complementary
+Accept: application/json
+
+### 8. Compatibilidad - con score en BD (Negro + Rojo = 0.93)
+GET http://localhost:8082/internal/colors/compatibility?hue1=0&saturation1=0&lightness1=0&hue2=0&saturation2=100&lightness2=50
+Accept: application/json
