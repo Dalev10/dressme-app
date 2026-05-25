@@ -2,50 +2,38 @@
 dependencies.py
 ───────────────
 Inyección de dependencias para FastAPI.
-define cómo se construyen los objetos que los routers necesitan.
+
+Define cómo se construyen los objetos que los routers necesitan.
 
 FastAPI usa el patrón Depends() para inyección. Cuando un endpoint
 declara `service: TasteVectorService = Depends(get_taste_vector_service)`,
 FastAPI llama a get_taste_vector_service() y pasa el resultado al endpoint.
 
-La instancia del cliente OpenAI se crea una sola vez al arrancar
-(patrón singleton implícito con lru_cache) para no abrir una nueva
-conexión HTTP en cada request.
+El EmbeddingService se construye una sola vez al arrancar
+(patrón singleton implícito con lru_cache) para no reconfigurar
+el cliente de Gemini en cada request.
 """
 
 from functools import lru_cache
-from openai import OpenAI
 from settings.config import get_settings
 from services.taste_vector_service import TasteVectorService
 from services.embedding_service import EmbeddingService
 
 
-@lru_cache(maxsize=1)
-def get_openai_client() -> OpenAI:
-    """
-    Crea el cliente de OpenAI una sola vez durante la vida del proceso.
-    lru_cache(maxsize=1) garantiza que siempre se devuelve la misma instancia.
-
-    El cliente lee OPENAI_API_KEY automáticamente desde la variable de entorno,
-    no hay que pasársela explícitamente. Si la variable no existe, OpenAI
-    lanzará AuthenticationError en la primera llamada a la API.
-    """
-    settings = get_settings()
-    return OpenAI(api_key=settings.openai_api_key)
-
-
 def get_taste_vector_service() -> TasteVectorService:
     """
-    TasteVectorService no depende de OpenAI (solo usa numpy),
-    así que no necesita el cliente. Se puede instanciar limpiamente.
+    TasteVectorService no depende de ninguna API externa (solo usa numpy),
+    así que no necesita credenciales. Se puede instanciar limpiamente.
     """
     return TasteVectorService()
 
 
+@lru_cache(maxsize=1)
 def get_embedding_service() -> EmbeddingService:
     """
-    EmbeddingService sí necesita el cliente de OpenAI.
-    Se construye pasándole el singleton del cliente.
+    EmbeddingService necesita la Gemini API key.
+    lru_cache garantiza que genai.configure() solo se llama una vez
+    durante la vida del proceso, no en cada request.
     """
-    client = get_openai_client()
-    return EmbeddingService(openai_client=client)
+    settings = get_settings()
+    return EmbeddingService(api_key=settings.gemini_api_key)

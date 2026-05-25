@@ -17,5 +17,6 @@ public class AppConfig {
     @Setter
     public static class Services {
         private String databaseUrl;
+        private String aiUrl;
     }
 }

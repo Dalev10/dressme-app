@@ -1,22 +1,20 @@
 """
 services/embedding_service.py
 ──────────────────────────────
-Genera embeddings de texto usando OpenAI text-embedding-3-small.
+Genera embeddings de texto usando Google Gemini gemini-embedding-001.
 
 Responsabilidades:
-  - Llamar a la API de OpenAI en modo batch (una sola llamada para N tarjetas)
+  - Llamar a la API de Gemini en modo batch (una sola llamada para N tarjetas)
+  - Fijar la dimensión de salida en 1536 via MRL (Matryoshka Representation Learning)
+    para mantener compatibilidad con el schema vector(1536) existente en DB
   - Mapear la respuesta al schema interno StyleCardEmbeddingResult
   - Manejar errores de la API con mensajes claros
 
-Por qué text-embedding-3-small y no large:
-  - small  → 1536 dims, ~6x más barato, latencia menor. Suficiente para moda.
-  - large  → 3072 dims, más preciso para semántica muy fina (código, ciencia).
-  El taste_vector ya está definido como vector(1536) en DB, así que small es
-  el modelo correcto y no hay que cambiar el schema.
 """
 
 import logging
-from openai import OpenAI
+import google.generativeai as genai
+from google.api_core.exceptions import GoogleAPIError, ResourceExhausted, Unauthenticated
 from schemas.onboarding import (
     GenerateEmbeddingsRequest,
     GenerateEmbeddingsResponse,
@@ -25,29 +23,30 @@ from schemas.onboarding import (
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 EXPECTED_DIMENSIONS = 1536
 
 
 class EmbeddingService:
 
-    def __init__(self, openai_client: OpenAI):
+    def __init__(self, api_key: str):
         """
-        Recibe el cliente de OpenAI por inyección.
-        Esto facilita el testing: en tests se puede pasar un cliente mock
-        sin tocar variables de entorno ni hacer llamadas reales.
+        Recibe la API key por inyección desde dependencies.py.
+        Configura el cliente de Gemini una sola vez al construir el servicio.
         """
-        self.client = openai_client
+        genai.configure(api_key=api_key)
 
     def generate_for_style_cards(
         self, request: GenerateEmbeddingsRequest
     ) -> GenerateEmbeddingsResponse:
         """
-        Genera embeddings para una lista de style cards en una sola llamada batch.
+        Genera embeddings para una lista de style cards.
 
-        La API de OpenAI acepta una lista de strings en el campo `input`.
-        Devuelve los embeddings en el mismo orden, así que podemos hacer
-        zip(request.style_cards, response.data) de forma segura.
+        La Gemini API acepta una lista de strings en el campo `contents`.
+        Tiene la forma:
+            result.embeddings[i].values  → list[float] del i-ésimo texto
+
+        output_dimensionality=1536 activa MRL para fijar la dimensión de salida.
         """
         logger.info(
             "EmbeddingService: Generando embeddings para %d tarjetas con modelo %s",
@@ -55,39 +54,40 @@ class EmbeddingService:
             EMBEDDING_MODEL,
         )
 
-        # Extraer los textos en el mismo orden que las tarjetas
         texts = [card.semantic_description for card in request.style_cards]
 
-        # ── Llamada batch a OpenAI ────────────────────────────────────────────
-        # Una sola llamada para todas las tarjetas. Mucho más eficiente
-        # que N llamadas individuales, y más barato en términos de tokens.
-        response = self.client.embeddings.create(
+        # ── Llamada batch a Gemini ────────────────────────────────────────────
+        # embed_content acepta una lista de strings directamente.
+        # task_type="SEMANTIC_SIMILARITY" optimiza los vectores para comparar
+        # similitud entre textos — exactamente lo que necesitamos para comparar
+        # el taste_vector del usuario con los embeddings de sus prendas.
+        result = genai.embed_content(
             model=EMBEDDING_MODEL,
-            input=texts,
+            content=texts,
+            task_type="SEMANTIC_SIMILARITY",
+            output_dimensionality=EXPECTED_DIMENSIONS,
         )
 
         # ── Validación de la respuesta ────────────────────────────────────────
-        if len(response.data) != len(request.style_cards):
+        if len(result["embedding"]) != len(request.style_cards):
             raise ValueError(
-                f"OpenAI devolvió {len(response.data)} embeddings "
+                f"Gemini devolvió {len(result['embedding'])} embeddings "
                 f"pero se enviaron {len(request.style_cards)} textos. "
                 "La respuesta está incompleta."
             )
 
         # ── Mapeo a schema interno ────────────────────────────────────────────
-        # response.data está ordenado por índice, igual que request.style_cards
+        # result["embedding"] es una lista de listas de floats, en el mismo
+        # orden que los textos enviados.
         results: list[StyleCardEmbeddingResult] = []
 
-        for card, embedding_obj in zip(request.style_cards, response.data):
-            vector = embedding_obj.embedding
+        for card, vector in zip(request.style_cards, result["embedding"]):
 
-            # Sanidad: OpenAI siempre devuelve 1536 para este modelo,
-            # pero lo validamos explícitamente para detectar cambios de API.
             if len(vector) != EXPECTED_DIMENSIONS:
                 raise ValueError(
                     f"Embedding para tarjeta '{card.id}' tiene {len(vector)} dims, "
                     f"se esperaban {EXPECTED_DIMENSIONS}. "
-                    f"¿Cambió el modelo de {EMBEDDING_MODEL}?"
+                    f"Verifica output_dimensionality en la llamada al modelo."
                 )
 
             results.append(

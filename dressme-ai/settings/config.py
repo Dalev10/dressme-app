@@ -15,26 +15,29 @@ con un mensaje claro de qué variable falta. Falla rápido y con claridad,
 
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
+ 
+ 
 class Settings(BaseSettings):
-    # ── OpenAI ────────────────────────────────────────────────────────────────
-    openai_api_key: str = "" # Requerida. Sin default — falla explícito si no existe.
-
+    # ── Google Gemini ─────────────────────────────────────────────────────────
+    # Default vacío: el servicio arranca sin la key. Solo es requerida al
+    # correr seed_embeddings.py o al analizar prendas (Fase 5+).
+    # El lifespan de main.py emite un WARNING si no está configurada.
+    gemini_api_key: str = ""
+ 
     # ── Servicio ──────────────────────────────────────────────────────────────
     app_name: str = "dressme-ai"
     app_env: str = "development"     # "development" | "production"
     log_level: str = "INFO"
-
+ 
     # ── Pydantic Settings config ───────────────────────────────────────────────
     model_config = SettingsConfigDict(
         env_file=".env",             # Lee el .env si existe (útil en local)
         env_file_encoding="utf-8",
-        case_sensitive=False,        # OPENAI_API_KEY == openai_api_key
+        case_sensitive=False,        # GEMINI_API_KEY == gemini_api_key
         extra="ignore",              # Variables de entorno extra no causan error
     )
-
-
+ 
+ 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """
