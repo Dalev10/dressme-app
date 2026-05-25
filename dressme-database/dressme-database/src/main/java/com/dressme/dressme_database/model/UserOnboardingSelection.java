@@ -30,7 +30,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserOnboardingSelection {
+public class  UserOnboardingSelection {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -1,8 +1,142 @@
 === CÓDIGO JAVA ===
 
-=== Módulo Java: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java ===
+=== Módulo Java: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java ===
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/AuthOrchestratorService.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/DressmeBackApplication.java
+
+package com.dressme.dressme_back;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DressmeBackApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(DressmeBackApplication.class, args);
+	}
+
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/config/AppConfig.java
+
+package com.dressme.dressme_back.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+import lombok.Getter;
+import lombok.Setter;
+
+@Configuration
+@ConfigurationProperties(prefix = "app")
+@Getter 
+@Setter
+public class AppConfig {
+    
+    private final Services services = new Services();
+
+    @Getter 
+    @Setter
+    public static class Services {
+        private String databaseUrl;
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/config/RestClientConfig.java
+
+package com.dressme.dressme_back.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
+
+@Configuration
+public class RestClientConfig {
+
+    @Bean
+    public RestClient.Builder restClientBuilder() {
+        return RestClient.builder();
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/controller/InternalOrchestratorController.java
+
+package com.dressme.dressme_back.controller;
+
+import com.dressme.dressme_back.schema.dto.StandardizedUserProviderInfo;
+import com.dressme.dressme_back.schema.dto.UserProfileResponse;
+import com.dressme.dressme_back.schema.dto.UserResponseDTO;
+import com.dressme.dressme_back.schema.dto.UserUpdateRequest;
+import com.dressme.dressme_back.service.AuthOrchestratorService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.UUID;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/internal/orchestrate")
+@RequiredArgsConstructor
+@Slf4j
+public class InternalOrchestratorController {
+
+    private final AuthOrchestratorService orchestratorService;
+
+    /**
+     * Endpoint receptor del Gateway. 
+     * Aquí llega la información de identidad ya validada externamente.
+     */
+    @PostMapping("/login")
+    public ResponseEntity<UserProfileResponse> handleLoginOrRegistration(
+            @Valid @RequestBody StandardizedUserProviderInfo providerInfo) {
+        
+        // Disparamos la lógica de orquestación:
+        // 1. Generación de vector (Mocked 1536 zeros)
+        // 2. Llamada a dressme-database
+        UserProfileResponse response = orchestratorService.orchestrateLogin(providerInfo);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/profile/{id}")
+    public ResponseEntity<UserResponseDTO> getProfile(@PathVariable UUID id) {
+        log.info("Back-Controller: Petición de perfil recibida para ID: {}", id);
+        UserResponseDTO response = orchestratorService.getUserProfile(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/profile/{id}")
+    public ResponseEntity<UserResponseDTO> updateProfile(
+            @PathVariable UUID id, 
+            @RequestBody UserUpdateRequest request) {
+        log.info("Back-Controller: Recibida petición de actualización para ID: {}", id);
+        return ResponseEntity.ok(orchestratorService.updateProfile(id, request));
+    }
+
+    @DeleteMapping("/profile/{id}")
+    public ResponseEntity<Void> deleteProfile(@PathVariable UUID id) {
+        log.info("Back-Controller: Orden de eliminación recibida para ID: {}", id);
+        orchestratorService.deleteProfile(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/AuthOrchestratorService.java
 
 package com.dressme.dressme_back.service;
 
@@ -21,7 +155,7 @@ public interface AuthOrchestratorService {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/impl/AuthOrchestratorServiceImpl.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/impl/AuthOrchestratorServiceImpl.java
 
 package com.dressme.dressme_back.service.impl;
 
@@ -117,98 +251,7 @@ public class AuthOrchestratorServiceImpl implements AuthOrchestratorService {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/controller/InternalOrchestratorController.java
-
-package com.dressme.dressme_back.controller;
-
-import com.dressme.dressme_back.schema.dto.StandardizedUserProviderInfo;
-import com.dressme.dressme_back.schema.dto.UserProfileResponse;
-import com.dressme.dressme_back.schema.dto.UserResponseDTO;
-import com.dressme.dressme_back.schema.dto.UserUpdateRequest;
-import com.dressme.dressme_back.service.AuthOrchestratorService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.UUID;
-
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-@RestController
-@RequestMapping("/internal/orchestrate")
-@RequiredArgsConstructor
-@Slf4j
-public class InternalOrchestratorController {
-
-    private final AuthOrchestratorService orchestratorService;
-
-    /**
-     * Endpoint receptor del Gateway. 
-     * Aquí llega la información de identidad ya validada externamente.
-     */
-    @PostMapping("/login")
-    public ResponseEntity<UserProfileResponse> handleLoginOrRegistration(
-            @Valid @RequestBody StandardizedUserProviderInfo providerInfo) {
-        
-        // Disparamos la lógica de orquestación:
-        // 1. Generación de vector (Mocked 1536 zeros)
-        // 2. Llamada a dressme-database
-        UserProfileResponse response = orchestratorService.orchestrateLogin(providerInfo);
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/profile/{id}")
-    public ResponseEntity<UserResponseDTO> getProfile(@PathVariable UUID id) {
-        log.info("Back-Controller: Petición de perfil recibida para ID: {}", id);
-        UserResponseDTO response = orchestratorService.getUserProfile(id);
-        return ResponseEntity.ok(response);
-    }
-
-    @PatchMapping("/profile/{id}")
-    public ResponseEntity<UserResponseDTO> updateProfile(
-            @PathVariable UUID id, 
-            @RequestBody UserUpdateRequest request) {
-        log.info("Back-Controller: Recibida petición de actualización para ID: {}", id);
-        return ResponseEntity.ok(orchestratorService.updateProfile(id, request));
-    }
-
-    @DeleteMapping("/profile/{id}")
-    public ResponseEntity<Void> deleteProfile(@PathVariable UUID id) {
-        log.info("Back-Controller: Orden de eliminación recibida para ID: {}", id);
-        orchestratorService.deleteProfile(id);
-        return ResponseEntity.noContent().build();
-    }
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/DressmeBackApplication.java
-
-package com.dressme.dressme_back;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-@SpringBootApplication
-public class DressmeBackApplication {
-
-	public static void main(String[] args) {
-		SpringApplication.run(DressmeBackApplication.class, args);
-	}
-
-}
-
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserUpdateRequest.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserUpdateRequest.java
 
 package com.dressme.dressme_back.schema.dto; 
 
@@ -242,22 +285,7 @@ public class UserUpdateRequest {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserProfileResponse.java
-
-package com.dressme.dressme_back.schema.dto;
-
-import java.util.UUID;
-
-public record UserProfileResponse(
-    UUID id,
-    String email,
-    String displayName,
-    String profilePicture,
-    boolean isCalibrated
-) {}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserResponseDTO.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserResponseDTO.java
 
 package com.dressme.dressme_back.schema.dto;
 
@@ -283,20 +311,7 @@ public class UserResponseDTO {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/StandardizedUserProviderInfo.java
-
-package com.dressme.dressme_back.schema.dto;
-
-public record StandardizedUserProviderInfo(
-    String provider,
-    String providerId,
-    String email,
-    String displayName,
-    String profilePictureUrl
-) {}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/InternalUserCreateRequest.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/InternalUserCreateRequest.java
 
 package com.dressme.dressme_back.schema.dto;
 
@@ -310,891 +325,677 @@ public record InternalUserCreateRequest(
 ) {}
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/config/RestClientConfig.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/StandardizedUserProviderInfo.java
 
-package com.dressme.dressme_back.config;
+package com.dressme.dressme_back.schema.dto;
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestClient;
+public record StandardizedUserProviderInfo(
+    String provider,
+    String providerId,
+    String email,
+    String displayName,
+    String profilePictureUrl
+) {}
 
-@Configuration
-public class RestClientConfig {
 
-    @Bean
-    public RestClient.Builder restClientBuilder() {
-        return RestClient.builder();
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserProfileResponse.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import java.util.UUID;
+
+public record UserProfileResponse(
+    UUID id,
+    String email,
+    String displayName,
+    String profilePicture,
+    boolean isCalibrated
+) {}
+
+
+=== Módulo Java: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java ===
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/DressmeDatabaseApplication.java
+
+package com.dressme.dressme_database;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DressmeDatabaseApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(DressmeDatabaseApplication.class, args);
+	}
+
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalUserController.java
+
+package com.dressme.dressme_database.controller;
+
+import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
+import com.dressme.dressme_database.schema.dto.UserProfileResponse;
+import com.dressme.dressme_database.schema.dto.UserResponseDTO;
+import com.dressme.dressme_database.schema.dto.UserUpdateRequest;
+import com.dressme.dressme_database.service.UserService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.UUID;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/internal/users")
+@RequiredArgsConstructor
+@Slf4j
+public class InternalUserController {
+
+    private final UserService userService;
+
+    /**
+     * Endpoint interno para registrar o recuperar un usuario tras autenticarse vía OAuth.
+     * Este endpoint es consumido exclusivamente por los microservicios orquestadores.
+     */
+    @PostMapping("/oauth-register")
+    public ResponseEntity<UserProfileResponse> createOrFetchUser(
+            @Valid @RequestBody InternalUserCreateRequest request) {
+        
+        UserProfileResponse response = userService.createUserFromOAuth(request);
+        
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponseDTO> getUserById(@PathVariable UUID id) {
+        log.info("Database Microservice: Consultando perfil para usuario ID: {}", id);
+        return ResponseEntity.ok(userService.getUserProfile(id));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<UserResponseDTO> update(@PathVariable UUID id, @RequestBody UserUpdateRequest request) {
+        log.info("Database Controller: Recibida solicitud de actualización para usuario: {}", id);
+        UserResponseDTO response = userService.updateUserProfile(id, request);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        log.info("Database Controller: Recibida solicitud DELETE para ID: {}", id);
+        userService.deleteUser(id);
+        return ResponseEntity.noContent().build(); // 204 No Content
     }
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/config/AppConfig.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalStyleCardController.java
+
+package com.dressme.dressme_database.controller;
+
+import com.dressme.dressme_database.schema.dto.OnboardingSelectionRequest;
+import com.dressme.dressme_database.schema.dto.StyleCardDTO;
+import com.dressme.dressme_database.schema.dto.StyleCardEmbeddingResponse;
+import com.dressme.dressme_database.service.StyleCardService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-package com.dressme.dressme_back.config;
-
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
-import lombok.Getter;
-import lombok.Setter;
-
-@Configuration
-@ConfigurationProperties(prefix = "app")
-@Getter 
-@Setter
-public class AppConfig {
-    
-    private final Services services = new Services();
-
-    @Getter 
-    @Setter
-    public static class Services {
-        private String databaseUrl;
-    }
-}
-
-
-=== Módulo Java: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java ===
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ColorCompatibility.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_color_compatibility")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ColorCompatibility {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne
-    @JoinColumn(name = "color_a_id", nullable = false)
-    private Color colorA;
-
-    @ManyToOne
-    @JoinColumn(name = "color_b_id", nullable = false)
-    private Color colorB;
-
-    @Column(name = "compatibility_score", nullable = false)
-    private Double compatibilityScore;
-
-    @Column(name = "created_at", updatable = false)
-    @Builder.Default
-    private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
-}
-
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/User.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_users")
-@Getter
-@Setter
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class User {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false)
-    private String email;
-
-    @Column(name = "display_name")
-    private String displayName;
-
-    @Column(name = "profile_picture")
-    private String profilePicture;
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Occasion.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_occasions")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Occasion {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false, length = 50)
-    private String name; // Ejemplo: Office, Gym, Wedding, Casual Date
-
-    @Column(columnDefinition = "TEXT")
-    private String description;
-
-    @Builder.Default
-    @Column(name = "is_active")
-    private boolean isActive = true;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Clothing.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothes")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Clothing {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id", nullable = false)
-    private ClothingCategory category;
-
-    @Column(name = "image_url", nullable = false, columnDefinition = "TEXT")
-    private String imageUrl;
-
-    @Builder.Default
-    @Column(name = "is_processed")
-    private boolean isProcessed = false; // Indica si la IA ya terminó el mapping
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-}
-
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Weather.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_weather")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Weather {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false, length = 50)
-    private String name; // Ejemplo: Sunny, Rainy, Snow, Heatwave
-
-    @Column(columnDefinition = "TEXT")
-    private String description;
-
-    @Builder.Default
-    @Column(name = "is_active")
-    private boolean isActive = true;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingStyle.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothes_styles")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingStyle {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clothes_id", nullable = false)
-    private Clothing clothing;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "style_id", nullable = false)
-    private Style style;
-}
-
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingOccasion.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothes_occasions")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingOccasion {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clothes_id", nullable = false)
-    private Clothing clothing;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "occasion_id", nullable = false)
-    private Occasion occasion;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingCategory.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-@Entity
-@Table(name = "tbl_clothing_categories")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingCategory {
+/**
+ * Endpoints internos de onboarding.
+ * Solo accesibles desde la red interna Docker (dressme-back).
+ * El prefijo /internal/ los deja fuera del alcance público del Gateway.
+ */
+@RestController
+@RequestMapping("/internal/onboarding")
+@RequiredArgsConstructor
+@Slf4j
+public class InternalStyleCardController {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    private final StyleCardService styleCardService;
 
-    @Column(unique = true, nullable = false, length = 100)
-    private String name;
+    /**
+     * GET /internal/onboarding/style-cards
+     *
+     * Devuelve las tarjetas activas para la pantalla de onboarding.
+     * dressme-back las proxeará al Gateway → Frontend.
+     */
+    @GetMapping("/style-cards")
+    public ResponseEntity<List<StyleCardDTO>> getStyleCards() {
+        log.info("Database: Solicitud de tarjetas de onboarding");
+        return ResponseEntity.ok(styleCardService.getActiveStyleCards());
+    }
 
-    @Column(columnDefinition = "TEXT")
-    private String description;
+    /**
+     * POST /internal/onboarding/style-cards/embeddings
+     * Body: ["uuid1", "uuid2", ...]
+     *
+     * Retorna los embeddings de las tarjetas seleccionadas.
+     * Consumido exclusivamente por dressme-back durante el flujo de calibración.
+     */
+    @PostMapping("/style-cards/embeddings")
+    public ResponseEntity<List<StyleCardEmbeddingResponse>> getEmbeddings(
+            @RequestBody List<UUID> styleCardIds) {
+        log.info("Database: Solicitud de embeddings para {} tarjetas", styleCardIds.size());
+        return ResponseEntity.ok(styleCardService.getEmbeddingsByIds(styleCardIds));
+    }
 
-    @Builder.Default
-    @Column(name = "is_active")
-    private boolean isActive = true;
+    /**
+     * POST /internal/onboarding/selections
+     *
+     * Persiste las reacciones del usuario a las tarjetas.
+     * Soporta re-calibración: reemplaza selecciones previas del mismo usuario.
+     */
+    @PostMapping("/selections")
+    public ResponseEntity<Void> saveSelections(
+            @Valid @RequestBody OnboardingSelectionRequest request) {
+        log.info("Database: Guardando selecciones de onboarding para usuario {}", request.userId());
+        styleCardService.saveSelections(request);
+        return ResponseEntity.noContent().build(); // 204
+    }
+}
 
-    // Relación Autorreferenciada (Jerarquía)
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_id")
-    private ClothingCategory parent;
 
-    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL)
-    private List<ClothingCategory> subcategories;
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalColorController.java
 
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+package com.dressme.dressme_database.controller;
+
+import com.dressme.dressme_database.schema.dto.ColorResponseDTO;
+import com.dressme.dressme_database.service.ColorService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/internal/colors")
+@RequiredArgsConstructor
+@Slf4j
+public class InternalColorController {
+
+    private final ColorService colorService;
+
+    @GetMapping("/{baseColorId}/complementary")
+    public ResponseEntity<ColorResponseDTO> getComplementaryColor(@PathVariable UUID baseColorId) {
+        log.info("Database: Solicitud de color complementario para el ID: {}", baseColorId);
+        return ResponseEntity.ok(colorService.getComplementaryColor(baseColorId));
+    }
+
+    @GetMapping("/{baseColorId}/analogous")
+    public ResponseEntity<List<ColorResponseDTO>> getAnalogousColors(@PathVariable UUID baseColorId) {
+        log.info("Database: Solicitud de colores análogos para el ID: {}", baseColorId);
+        return ResponseEntity.ok(colorService.getAnalogousColors(baseColorId));
+    }
 }
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Outfit.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalColorCompatibilityController.java
 
-package com.dressme.dressme_database.model;
+package com.dressme.dressme_database.controller;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
+import com.dressme.dressme_database.facade.ColorOrchestratorFacade;
+import com.dressme.dressme_database.schema.dto.ColorCompatibilityRequestDTO;
+import com.dressme.dressme_database.schema.dto.CompatibilityResponseDTO;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/internal/colors")
+@RequiredArgsConstructor
+@Validated
+@Slf4j
+public class InternalColorCompatibilityController {
+
+    private final ColorOrchestratorFacade  colorOrchestratorFacade;
+
+    @GetMapping("/compatibility")
+    public ResponseEntity<CompatibilityResponseDTO> checkCompatibility(
+        @Valid @ModelAttribute ColorCompatibilityRequestDTO request){
+
+        log.info("Database: Solicitud de compatibilidad entre colores HSL({},{},{}) y HSL({},{},{})",
+            request.hue1(), request.saturation1(), request.lightness1(),
+            request.hue2(), request.saturation2(), request.lightness2());
+
+        CompatibilityResponseDTO response = colorOrchestratorFacade.checkCompatibility(
+            request.hue1(), request.saturation1(), request.lightness1(),
+            request.hue2(), request.saturation2(), request.lightness2()
+        );
+
+        return ResponseEntity.ok(response);    }
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/facade/ColorOrchestratorFacade.java
+
+package com.dressme.dressme_database.facade;
+
+import com.dressme.dressme_database.schema.dto.CompatibilityResponseDTO;
+
+public interface ColorOrchestratorFacade {
+    CompatibilityResponseDTO checkCompatibility(int h1, int s1, int l1,
+                                                int h2, int s2, int l2);
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/facade/impl/ColorOrchestratorFacadeImpl.java
+
+package com.dressme.dressme_database.facade.impl;
+
+import com.dressme.dressme_database.facade.ColorOrchestratorFacade;
+import com.dressme.dressme_database.schema.dto.ColorResponseDTO;
+import com.dressme.dressme_database.schema.dto.CompatibilityResponseDTO;
+import com.dressme.dressme_database.service.ColorCompatibilityService;
+import com.dressme.dressme_database.service.ColorService;
+import com.dressme.dressme_database.util.ColorTheoryUtils;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+public class ColorOrchestratorFacadeImpl implements ColorOrchestratorFacade {
+    private final ColorService colorService;
+    private final ColorCompatibilityService colorCompatibilityService;
+
+    @Override
+    public CompatibilityResponseDTO checkCompatibility(int hue1, int saturation1, int lightness1,
+                                                       int hue2, int saturation2, int lightness2){
+
+        ColorResponseDTO matchedColor1 = colorService.getClosestColor(hue1, saturation1, lightness1);
+        ColorResponseDTO matchedColor2 = colorService.getClosestColor(hue2, saturation2, lightness2);
+
+        Optional<Double> storedScore = colorCompatibilityService
+            .getCompatibilityScore(matchedColor1.id(), matchedColor2.id());
+
+        double score = storedScore.orElseGet(
+            () -> ColorTheoryUtils.calculateHarmonyScore(matchedColor1.hue(), matchedColor2.hue())
+        );
+
+        return new CompatibilityResponseDTO(matchedColor1, matchedColor2, score);
+    }
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/StyleCardRepository.java
+
+package com.dressme.dressme_database.repository;
+ 
+import com.dressme.dressme_database.model.StyleCard;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+ 
+import java.util.List;
+import java.util.UUID;
+ 
+@Repository
+public interface StyleCardRepository extends JpaRepository<StyleCard, UUID> {
+ 
+    /**
+     * Devuelve las tarjetas activas ordenadas para la pantalla de onboarding.
+     */
+    List<StyleCard> findByIsActiveTrueOrderByDisplayOrderAsc();
+ 
+    /**
+     * Usado por dressme-back para obtener los embeddings de las tarjetas
+     * seleccionadas y calcular el taste_vector del usuario.
+     */
+    List<StyleCard> findByIdIn(List<UUID> ids);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ColorCompatibilityRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.ColorCompatibility;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface ColorCompatibilityRepository extends JpaRepository<ColorCompatibility, UUID> {
+    @Query("SELECT c.compatibilityScore FROM ColorCompatibility c WHERE " +
+        "(c.colorA.id = :id1 AND c.colorB.id = :id2) OR " +
+        "(c.colorA.id = :id2 AND c.colorB.id = :id1)")
+    Optional<Double> findScoreByColorIds(@Param("id1") UUID id1, @Param("id2") UUID id2);
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserTasteProfileRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.UserTasteProfile;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserTasteProfileRepository extends JpaRepository<UserTasteProfile, UUID> {
+    Optional<UserTasteProfile> findByUserId(UUID userId);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserOnboardingSelectionRepository.java
+
+package com.dressme.dressme_database.repository;
+ 
+import com.dressme.dressme_database.model.UserOnboardingSelection;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+ 
+import java.util.List;
+import java.util.UUID;
+ 
+@Repository
+public interface UserOnboardingSelectionRepository extends JpaRepository<UserOnboardingSelection, UUID> {
+ 
+    /**
+     * Historial completo de selecciones de un usuario (útil para re-calibración futura).
+     */
+    List<UserOnboardingSelection> findByUserId(UUID userId);
+ 
+    /**
+     * Limpieza antes de una re-calibración: borra las selecciones previas del usuario.
+     */
+    void deleteByUserId(UUID userId);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ProviderRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.Provider;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface ProviderRepository extends JpaRepository<Provider, UUID> {
+    Optional<Provider> findByName(String name);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ColorRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.Color;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface ColorRepository extends JpaRepository<Color, UUID> {
+    List<Color> findByNeutralFalse();
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.User;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserRepository extends JpaRepository<User, UUID> {
+    // Útil para validaciones cruzadas o búsquedas internas
+    Optional<User> findByEmail(String email);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserIdentityRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.UserIdentity;
+import com.dressme.dressme_database.model.Provider;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface UserIdentityRepository extends JpaRepository<UserIdentity, UUID> {
+    // La consulta clave para el registro por OAuth - busca por la entidad Provider
+    Optional<UserIdentity> findByProviderAndProviderUserId(Provider provider, String providerUserId);
+    void deleteByUserId(UUID userId);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/exception/GlobalExceptionHandler.java
+
+package com.dressme.dressme_database.exception;
+
+import com.dressme.dressme_database.schema.dto.ErrorResponseDTO;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.validation.BindException;
 import java.time.LocalDateTime;
-import java.util.UUID;
+import java.util.stream.Collectors;
 
-@Entity
-@Table(name = "tbl_outfits")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Outfit {
+@RestControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @ExceptionHandler(ColorNotFoundException.class)
+    public ResponseEntity<ErrorResponseDTO> handleColorNotFoundException(
+        ColorNotFoundException ex,
+        HttpServletRequest request) {
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+        log.warn("Recurso no encontrado: {}", ex.getMessage());
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "dress_code_id")
-    private DressCode dressCode; 
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+            LocalDateTime.now(),
+            HttpStatus.NOT_FOUND.value(),
+            HttpStatus.NOT_FOUND.getReasonPhrase(),
+            ex.getMessage(),
+            request.getRequestURI()
+        );
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "occasion_id")
-    private Occasion occasion;
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "weather_id")
-    private Weather weather;
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponseDTO> handleConstraintViolation(
+        ConstraintViolationException ex,
+        HttpServletRequest request) {
 
-    @Column(length = 100)
-    private String name;
+        String message = ex.getConstraintViolations()
+            .stream()
+            .map(v -> v.getPropertyPath() + ": " + v.getMessage())
+            .collect(Collectors.joining(", "));
 
-    @Column(name = "rating")
-    private Integer rating; // Calificación del usuario para el conjunto
+        log.warn("Error de validación: {}", message);
 
-    @Column(name = "is_ai_processed")
-    private boolean isAiProcessed; // Indica si fue generado por la IA o manual
+        ErrorResponseDTO error = new ErrorResponseDTO(
+            LocalDateTime.now(),
+            HttpStatus.BAD_REQUEST.value(),
+            HttpStatus.BAD_REQUEST.getReasonPhrase(),
+            message,
+            request.getRequestURI()
+        );
 
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/OutfitAiAudit.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_outfit_ai_audit")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class OutfitAiAudit {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "outfit_id", unique = true, nullable = false)
-    private Outfit outfit;
-
-    @Column(name = "match_score", precision = 3, scale = 2)
-    private BigDecimal matchScore;
-
-    @Column(name = "affinity_score", precision = 3, scale = 2)
-    private BigDecimal affinityScore;
-
-    // Vector matemático del outfit completo para el motor de ML
-    @JdbcTypeCode(SqlTypes.VECTOR)
-    @Column(name = "outfit_vector", columnDefinition = "vector(1536)")
-    private float[] outfitVector;
-
-    @Column(name = "ai_feedback_log", columnDefinition = "TEXT")
-    private String aiFeedbackLog;
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-}
+        return ResponseEntity.badRequest().body(error);
+    }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/UserIdentity.java
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ErrorResponseDTO> handleBindException(
+        BindException ex,
+        HttpServletRequest request) {
 
-package com.dressme.dressme_database.model;
+        String message = ex.getBindingResult()
+            .getFieldErrors()
+            .stream()
+            .map(e -> e.getField() + ": " + e.getDefaultMessage())
+            .collect(Collectors.joining(", "));
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.UpdateTimestamp;
-import java.time.LocalDateTime;
-import java.util.UUID;
+        log.warn("Error de validación: {}", message);
 
-@Entity
-@Table(name = "tbl_user_identities")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class UserIdentity {
+        ErrorResponseDTO error = new ErrorResponseDTO(
+            LocalDateTime.now(),
+            HttpStatus.BAD_REQUEST.value(),
+            HttpStatus.BAD_REQUEST.getReasonPhrase(),
+            message,
+            request.getRequestURI()
+        );
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+        return ResponseEntity.badRequest().body(error);
+    }
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponseDTO> handleGenericException(
+        Exception ex,
+        HttpServletRequest request) {
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "provider_id", nullable = false)
-    private Provider provider;
+        log.error("Error interno del servidor: ", ex);
 
-    @Column(name = "provider_user_id", unique = true, nullable = false)
-    private String providerUserId;
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+            LocalDateTime.now(),
+            HttpStatus.INTERNAL_SERVER_ERROR.value(),
+            HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+            "Ocurrió un error inesperado en el servidor de base de datos",
+            request.getRequestURI()
+        );
 
-    @Column(name = "access_token", columnDefinition = "TEXT", nullable = false)
-    private String accessToken;
-
-    @Column(name = "refresh_token", columnDefinition = "TEXT")
-    private String refreshToken;
-
-    @Column(name = "expires_at")
-    private LocalDateTime expiresAt;
-
-    @Column(columnDefinition = "TEXT") // Almacenaremos el JSON como String para el MVP
-    private String scopes;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-}
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+    }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingOutfit.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothes_outfits")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingOutfit {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clothes_id", nullable = false)
-    private Clothing clothing;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "outfit_id", nullable = false)
-    private Outfit outfit;
 }
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Provider.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/exception/ColorNotFoundException.java
 
-package com.dressme.dressme_database.model;
+package com.dressme.dressme_database.exception;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_providers")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Provider {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false, length = 100)
-    private String name;
-
-    @Column(name = "auth_endpoint", columnDefinition = "TEXT")
-    private String authEndpoint;
-
-    @Column(name = "icon_url")
-    private String iconUrl;
-
-    @Builder.Default
-    @Column(name = "is_active")
-    private boolean isActive = true;
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingAiAudit.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.UpdateTimestamp;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothing_ai_audit")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingAiAudit {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clothes_id", unique = true, nullable = false)
-    private Clothing clothing;
-
-    @Column(name = "confidence_score", precision = 3, scale = 2) 
-    private BigDecimal confidenceScore;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "predicted_category_id")
-    private ClothingCategory predictedCategory;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "predicted_style_id")
-    private Style predictedStyle;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "predicted_color_id")
-    private Color predictedColor;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "predicted_weather_id")
-    private Weather predictedWeather;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "predicted_occasion_id")
-    private Occasion predictedOccasion;
-
-    @Builder.Default
-    @Column(name = "was_corrected")
-    private boolean wasCorrected = false;
-
-    @Column(name = "ai_provider")
-    private String aiProvider; // 'google_vision', 'clarifai'
-
-    @UpdateTimestamp
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/UserTasteProfile.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.UpdateTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-import java.time.LocalDateTime;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_user_taste_profile")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class UserTasteProfile {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    // Relación 1:1 - Cada usuario tiene un único perfil de ADN estético
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", unique = true, nullable = false)
-    private User user;
-
-    // El "Mapa de Calor" de gustos en 1536 dimensiones
-    @JdbcTypeCode(SqlTypes.VECTOR)
-    @Column(name = "taste_vector", columnDefinition = "vector(1536)", nullable = false)
-    private float[] tasteVector;
-
-    @Column(name = "source_type", nullable = false)
-    private String sourceType; // 'pinterest', 'google_onboarding', 'manual_game'
-
-    @Builder.Default
-    @Column(name = "is_calibrated")
-    private boolean isCalibrated = false;
-
-    @UpdateTimestamp
-    @Column(name = "last_updated")
-    private LocalDateTime lastUpdated;
+public class ColorNotFoundException extends RuntimeException {
+    public ColorNotFoundException(String message) {
+        super(message);
+    }
 }
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Color.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/ColorCompatibilityService.java
 
-package com.dressme.dressme_database.model;
+package com.dressme.dressme_database.service;
 
-import jakarta.persistence.*;
-import lombok.*;
+import java.util.Optional;
 import java.util.UUID;
 
-@Entity
-@Table(name = "tbl_colors")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Color {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false, length = 50)
-    private String name;
-
-    @Column(nullable = false)
-    private Integer hue;
-
-    @Column(nullable = false)
-    private Integer saturation;
-
-    @Column(nullable = false)
-    private Integer lightness;
-
-    @Builder.Default
-    @Column(name = "is_neutral")
-    private boolean isNeutral = false;
+public interface ColorCompatibilityService {
+    Optional<Double> getCompatibilityScore(UUID colorId1, UUID colorId2);
 }
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingColor.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/StyleCardService.java
 
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.math.BigDecimal;
+package com.dressme.dressme_database.service;
+ 
+import com.dressme.dressme_database.schema.dto.OnboardingSelectionRequest;
+import com.dressme.dressme_database.schema.dto.StyleCardDTO;
+import com.dressme.dressme_database.schema.dto.StyleCardEmbeddingResponse;
+ 
+import java.util.List;
 import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothes_colors")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingColor {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clothes_id", nullable = false)
-    private Clothing clothing;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "color_id", nullable = false)
-    private Color color;
-
-    @Column(name = "is_primary")
-    private boolean isPrimary;
-
-    @Column(precision = 5, scale = 2) 
-    private BigDecimal percentage;
+ 
+public interface StyleCardService {
+ 
+    /** Devuelve las tarjetas activas ordenadas para la pantalla de onboarding. */
+    List<StyleCardDTO> getActiveStyleCards();
+ 
+    /**
+     * Devuelve los embeddings de un subconjunto de tarjetas.
+     * Usado internamente por dressme-back para calcular el taste_vector.
+     */
+    List<StyleCardEmbeddingResponse> getEmbeddingsByIds(List<UUID> ids);
+ 
+    /**
+     * Persiste las selecciones del usuario.
+     * Si el usuario ya tenía selecciones previas, las reemplaza (re-calibración).
+     */
+    void saveSelections(OnboardingSelectionRequest request);
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/DressCode.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/ColorService.java
 
-package com.dressme.dressme_database.model;
+package com.dressme.dressme_database.service;
 
-import jakarta.persistence.*;
-import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-import java.time.LocalDateTime;
+import com.dressme.dressme_database.model.Color;
+import com.dressme.dressme_database.schema.dto.ColorResponseDTO;
+
+import java.util.List;
 import java.util.UUID;
 
-@Entity
-@Table(name = "tbl_dress_codes")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class DressCode {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false, length = 150)
-    private String name;
-
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String description;
-
-    // Representación matemática de 1536 dimensiones (OpenAI standard)
-    @JdbcTypeCode(SqlTypes.VECTOR)
-    @Column(name = "embedding_vector", columnDefinition = "vector(1536)", nullable = false)
-    private float[] embeddingVector;
-
-    @Builder.Default
-    @Column(name = "is_active")
-    private boolean isActive = true;
-
-    @CreationTimestamp
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+public interface ColorService {
+    ColorResponseDTO getComplementaryColor(UUID baseColorId);
+    List<ColorResponseDTO> getAnalogousColors(UUID baseColorID);
+    ColorResponseDTO getClosestColor(int hue, int saturation, int lightness);
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Style.java
 
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_styles")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Style {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @Column(unique = true, nullable = false, length = 50)
-    private String name; 
-
-    @Column(columnDefinition = "TEXT")
-    private String description;
-
-    @Builder.Default
-    @Column(name = "is_active")
-    private boolean isActive = true;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingWeather.java
-
-package com.dressme.dressme_database.model;
-
-import jakarta.persistence.*;
-import lombok.*;
-
-import java.util.UUID;
-
-@Entity
-@Table(name = "tbl_clothes_weather")
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ClothingWeather {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "clothes_id", nullable = false)
-    private Clothing clothing;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "weather_id", nullable = false)
-    private Weather weather;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/UserService.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/UserService.java
 
 package com.dressme.dressme_database.service;
 
@@ -1213,90 +1014,7 @@ public interface UserService {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/ColorService.java
-
-package com.dressme.dressme_database.service;
-
-import com.dressme.dressme_database.model.Color;
-
-import java.util.List;
-
-public interface ColorService {
-    Color getComplementaryColor(Color baseColor);
-    List<Color> getAnalogousColors(Color baseColor);
-}
-
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/ColorServiceImpl.java
-
-package com.dressme.dressme_database.service.impl;
-
-import com.dressme.dressme_database.model.Color;
-import com.dressme.dressme_database.repository.ColorRepository;
-import com.dressme.dressme_database.service.ColorService;
-import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
-import java.util.List;
-
-@Service
-public class ColorServiceImpl implements ColorService {
-    private final ColorRepository colorRepository;
-
-    public ColorServiceImpl(ColorRepository colorRepository) {
-        this.colorRepository = colorRepository;
-    }
-
-    @Override
-    public Color getComplementaryColor(Color baseColor){
-        if (baseColor.isNeutral()) return null;
-
-        int targetHue = (baseColor.getHue() + 180) % 360;
-        List<Color> nonNeutralColors = colorRepository.findByIsNeutralFalse();
-
-        /* Margen de toleracia para encontrar un color similar en la DB
-        Ej: se busca un amarillo con Hue 65, pero en la DB tenemos
-        amarillo con Hue 60
-         */
-        final int TOLERANCE = 15;
-
-        return nonNeutralColors.stream()
-            .filter(color ->{
-            int diff = Math.abs(color.getHue() - targetHue);
-            int distance = Math.min(diff, 360 - diff);
-            return distance <= TOLERANCE;
-        })
-            .findFirst()
-            .orElse(null);
-    }
-
-    @Override
-    public List<Color> getAnalogousColors(Color baseColor){
-        if (baseColor.isNeutral()) return new ArrayList<>();
-        int upperAnalogousHue = (baseColor.getHue() + 30) % 360;
-        int lowerAnalogousHue = (baseColor.getHue() - 30 + 360) % 360;
-
-        final int TOLERANCE = 15;
-
-        List<Color> nonNeutralColors = colorRepository.findByIsNeutralFalse();
-
-        return nonNeutralColors.stream()
-            .filter(color -> {
-                int diffUpper = Math.abs(color.getHue() - upperAnalogousHue);
-                int distanceToUpper = Math.min(diffUpper, 360 - diffUpper);
-                int diffLower = Math.abs(color.getHue() - lowerAnalogousHue);
-                int distanceToLower = Math.min(diffLower, 360 - diffLower);
-
-                return distanceToUpper <= TOLERANCE || distanceToLower <= TOLERANCE;
-            })
-            .toList();
-    }
-}
-
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/UserServiceImpl.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/UserServiceImpl.java
 
 package com.dressme.dressme_database.service.impl;
 
@@ -1367,6 +1085,8 @@ public class UserServiceImpl implements UserService {
         UserTasteProfile tasteProfile = UserTasteProfile.builder()
                 .user(newUser)
                 .tasteVector(request.initialTasteVector())
+                .sourceType("COLD_START")
+                .isCalibrated(false)
                 .build();
         userTasteProfileRepository.save(tasteProfile);
 
@@ -1465,180 +1185,1307 @@ public class UserServiceImpl implements UserService {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/DressmeDatabaseApplication.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/ColorCompatibilityServiceImpl.java
 
-package com.dressme.dressme_database;
+package com.dressme.dressme_database.service.impl;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import com.dressme.dressme_database.repository.ColorCompatibilityRepository;
+import com.dressme.dressme_database.service.ColorCompatibilityService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
-@SpringBootApplication
-public class DressmeDatabaseApplication {
+import java.util.Optional;
+import java.util.UUID;
 
-	public static void main(String[] args) {
-		SpringApplication.run(DressmeDatabaseApplication.class, args);
-	}
+@Service
+@RequiredArgsConstructor
+public class ColorCompatibilityServiceImpl implements ColorCompatibilityService {
+    private final ColorCompatibilityRepository colorCompatibilityRepository;
+
+    @Override
+    public Optional<Double> getCompatibilityScore(UUID colorId1, UUID colorId2) {
+        return colorCompatibilityRepository.findScoreByColorIds(colorId1, colorId2);
+    }
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/ColorServiceImpl.java
+
+package com.dressme.dressme_database.service.impl;
+
+import com.dressme.dressme_database.exception.ColorNotFoundException;
+import com.dressme.dressme_database.mapper.ColorMapper;
+import com.dressme.dressme_database.model.Color;
+import com.dressme.dressme_database.repository.ColorRepository;
+import com.dressme.dressme_database.schema.dto.ColorResponseDTO;
+import com.dressme.dressme_database.service.ColorService;
+import com.dressme.dressme_database.util.ColorTheoryUtils;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class ColorServiceImpl implements ColorService {
+    private final ColorRepository colorRepository;
+    private final ColorMapper colorMapper;
+
+    @Override
+    public ColorResponseDTO getComplementaryColor(UUID baseColorId){
+        Color baseColor = getBaseColorOrThrow(baseColorId);
+
+        if (baseColor.isNeutral()) return null;
+
+        int targetHue = ColorTheoryUtils.getComplementaryHue(baseColor.getHue());
+
+        return colorRepository.findByNeutralFalse().stream()
+            .filter(color -> ColorTheoryUtils.isWithinTolerance(color.getHue(), targetHue))
+            .findFirst()
+            .map(colorMapper::toDto)
+            .orElse(null);
+    }
+
+    @Override
+    public List<ColorResponseDTO> getAnalogousColors(UUID baseColorId) {
+        Color baseColor = getBaseColorOrThrow(baseColorId);
+
+        if (baseColor.isNeutral()) return List.of();
+
+        int[] analogousHues = ColorTheoryUtils.getAnalogousHues(baseColor.getHue());
+
+        List<Color> analogousColors = colorRepository.findByNeutralFalse().stream()
+            .filter(color -> ColorTheoryUtils.isWithinTolerance(color.getHue(), analogousHues[0]) ||
+                ColorTheoryUtils.isWithinTolerance(color.getHue(), analogousHues[1]))
+            .toList();
+
+        return colorMapper.toDtoList(analogousColors);
+    }
+
+    private Color getBaseColorOrThrow(UUID id) {
+        return colorRepository.findById(id)
+            .orElseThrow(() -> new ColorNotFoundException("Color no encontrado con ID: " + id));
+    }
+
+    @Override
+    public ColorResponseDTO getClosestColor(int  hue, int saturation, int lightness) {
+        List<Color> allColors = colorRepository.findAll();
+        Color closestColor = allColors.stream()
+            .min(Comparator.comparingDouble(dbColor ->
+                ColorTheoryUtils.calculateColorDistance(
+                    hue, saturation, lightness,
+                    dbColor.getHue(), dbColor.getSaturation(), dbColor.getLightness()
+                )
+            ))
+            .orElseThrow(() -> new ColorNotFoundException("No se encontraron colores en la base de datos"));
+        return colorMapper.toDto(closestColor);
+    }
 
 }
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalUserController.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/StyleCardServiceImpl.java
 
-package com.dressme.dressme_database.controller;
-
-import com.dressme.dressme_database.schema.dto.InternalUserCreateRequest;
-import com.dressme.dressme_database.schema.dto.UserProfileResponse;
-import com.dressme.dressme_database.schema.dto.UserResponseDTO;
-import com.dressme.dressme_database.schema.dto.UserUpdateRequest;
-import com.dressme.dressme_database.service.UserService;
-import jakarta.validation.Valid;
+package com.dressme.dressme_database.service.impl;
+ 
+import com.dressme.dressme_database.model.StyleCard;
+import com.dressme.dressme_database.model.User;
+import com.dressme.dressme_database.model.UserOnboardingSelection;
+import com.dressme.dressme_database.repository.StyleCardRepository;
+import com.dressme.dressme_database.repository.UserOnboardingSelectionRepository;
+import com.dressme.dressme_database.repository.UserRepository;
+import com.dressme.dressme_database.schema.dto.OnboardingSelectionRequest;
+import com.dressme.dressme_database.schema.dto.StyleCardDTO;
+import com.dressme.dressme_database.schema.dto.StyleCardEmbeddingResponse;
+import com.dressme.dressme_database.service.StyleCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+ 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-@RestController
-@RequestMapping("/internal/users")
+import java.util.function.Function;
+import java.util.stream.Collectors;
+ 
+@Service
 @RequiredArgsConstructor
 @Slf4j
-public class InternalUserController {
+public class StyleCardServiceImpl implements StyleCardService {
+ 
+    private final StyleCardRepository styleCardRepository;
+    private final UserOnboardingSelectionRepository selectionRepository;
+    private final UserRepository userRepository;
+ 
+    @Override
+    public List<StyleCardDTO> getActiveStyleCards() {
+        log.info("StyleCardService: Consultando tarjetas activas");
+        return styleCardRepository
+                .findByIsActiveTrueOrderByDisplayOrderAsc()
+                .stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+    }
+ 
+    @Override
+    public List<StyleCardEmbeddingResponse> getEmbeddingsByIds(List<UUID> ids) {
+        log.info("StyleCardService: Consultando embeddings para {} tarjetas", ids.size());
+        return styleCardRepository.findByIdIn(ids)
+                .stream()
+                .map(card -> new StyleCardEmbeddingResponse(
+                        card.getId(),
+                        card.getName(),
+                        card.getEmbeddingVector()
+                ))
+                .collect(Collectors.toList());
+    }
+ 
+    @Override
+    @Transactional
+    public void saveSelections(OnboardingSelectionRequest request) {
+        log.info("StyleCardService: Guardando {} selecciones para usuario {}",
+                request.selections().size(), request.userId());
+ 
+        User user = userRepository.findById(request.userId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Usuario no encontrado con ID: " + request.userId()));
+ 
+        // Re-calibración: borrar selecciones previas antes de guardar las nuevas
+        selectionRepository.deleteByUserId(request.userId());
+ 
+        // Cargar las style cards de una sola vez para evitar N+1 queries
+        List<UUID> cardIds = request.selections().stream()
+                .map(OnboardingSelectionRequest.SelectionItem::styleCardId)
+                .collect(Collectors.toList());
+ 
+        Map<UUID, StyleCard> cardsById = styleCardRepository.findByIdIn(cardIds)
+                .stream()
+                .collect(Collectors.toMap(StyleCard::getId, Function.identity()));
+ 
+        List<UserOnboardingSelection> entities = request.selections().stream()
+                .map(item -> {
+                    StyleCard card = cardsById.get(item.styleCardId());
+                    if (card == null) {
+                        throw new RuntimeException(
+                                "StyleCard no encontrada con ID: " + item.styleCardId());
+                    }
+                    return UserOnboardingSelection.builder()
+                            .user(user)
+                            .styleCard(card)
+                            .reaction(item.reaction())
+                            .build();
+                })
+                .collect(Collectors.toList());
+ 
+        selectionRepository.saveAll(entities);
+        log.info("StyleCardService: {} selecciones guardadas correctamente", entities.size());
+    }
+ 
+    // ── Mapper privado ────────────────────────────────────────────────────────
+ 
+    private StyleCardDTO toDTO(StyleCard card) {
+        return new StyleCardDTO(
+                card.getId(),
+                card.getName(),
+                card.getSemanticDescription(),
+                card.getImageUrl(),
+                card.getTags(),
+                card.getDisplayOrder()
+        );
+    }
+}
 
-    private final UserService userService;
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Color.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_colors")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Color {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 50)
+    private String name;
+
+    @Column(nullable = false)
+    private Integer hue;
+
+    @Column(nullable = false)
+    private Integer saturation;
+
+    @Column(nullable = false)
+    private Integer lightness;
+
+    @Builder.Default
+    @Column(name = "is_neutral")
+    private boolean neutral = false;
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/UserTasteProfile.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_user_taste_profile")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserTasteProfile {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    // Relación 1:1 - Cada usuario tiene un único perfil de ADN estético
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", unique = true, nullable = false)
+    private User user;
+
+    // El "Mapa de Calor" de gustos en 1536 dimensiones
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(name = "taste_vector", columnDefinition = "vector(1536)", nullable = false)
+    private float[] tasteVector;
+
+    @Column(name = "source_type", nullable = false)
+    private String sourceType; // 'pinterest', 'google_onboarding', 'manual_game'
+
+    @Builder.Default
+    @Column(name = "is_calibrated")
+    private boolean isCalibrated = false;
+
+    @UpdateTimestamp
+    @Column(name = "last_updated")
+    private LocalDateTime lastUpdated;
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/OutfitAiAudit.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_outfit_ai_audit")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class OutfitAiAudit {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "outfit_id", unique = true, nullable = false)
+    private Outfit outfit;
+
+    @Column(name = "match_score", precision = 3, scale = 2)
+    private BigDecimal matchScore;
+
+    @Column(name = "affinity_score", precision = 3, scale = 2)
+    private BigDecimal affinityScore;
+
+    // Vector matemático del outfit completo para el motor de ML
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(name = "outfit_vector", columnDefinition = "vector(1536)")
+    private float[] outfitVector;
+
+    @Column(name = "ai_feedback_log", columnDefinition = "TEXT")
+    private String aiFeedbackLog;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Clothing.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothes")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Clothing {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id", nullable = false)
+    private ClothingCategory category;
+
+    @Column(name = "image_url", nullable = false, columnDefinition = "TEXT")
+    private String imageUrl;
+
+    @Builder.Default
+    @Column(name = "is_processed")
+    private boolean isProcessed = false; // Indica si la IA ya terminó el mapping
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingOccasion.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothes_occasions")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingOccasion {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clothes_id", nullable = false)
+    private Clothing clothing;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "occasion_id", nullable = false)
+    private Occasion occasion;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Outfit.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_outfits")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Outfit {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dress_code_id")
+    private DressCode dressCode; 
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "occasion_id")
+    private Occasion occasion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "weather_id")
+    private Weather weather;
+
+    @Column(length = 100)
+    private String name;
+
+    @Column(name = "rating")
+    private Integer rating; // Calificación del usuario para el conjunto
+
+    @Column(name = "is_ai_processed")
+    private boolean isAiProcessed; // Indica si fue generado por la IA o manual
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/UserIdentity.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_user_identities")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserIdentity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "provider_id", nullable = false)
+    private Provider provider;
+
+    @Column(name = "provider_user_id", unique = true, nullable = false)
+    private String providerUserId;
+
+    @Column(name = "access_token", columnDefinition = "TEXT", nullable = false)
+    private String accessToken;
+
+    @Column(name = "refresh_token", columnDefinition = "TEXT")
+    private String refreshToken;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    @Column(columnDefinition = "TEXT") // Almacenaremos el JSON como String para el MVP
+    private String scopes;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/UserOnboardingSelection.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Registra la reacción de un usuario a cada tarjeta de onboarding.
+ *
+ * Sirve para dos propósitos:
+ *   1. Alimentar el cálculo del taste_vector inicial (Fase 2).
+ *   2. Guardar historial para re-entrenamientos futuros del perfil estético.
+ */
+@Entity
+@Table(
+    name = "tbl_onboarding_selections",
+    uniqueConstraints = {
+        // Un usuario solo puede reaccionar una vez a cada tarjeta
+        @UniqueConstraint(
+            name = "uq_user_style_card",
+            columnNames = {"user_id", "style_card_id"}
+        )
+    }
+)
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class UserOnboardingSelection {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "style_card_id", nullable = false)
+    private StyleCard styleCard;
 
     /**
-     * Endpoint interno para registrar o recuperar un usuario tras autenticarse vía OAuth.
-     * Este endpoint es consumido exclusivamente por los microservicios orquestadores.
+     * Reacción del usuario a la tarjeta.
+     * LIKE    → peso +1.0 en el cálculo del vector
+     * DISLIKE → peso -0.3 (señal negativa suave)
+     * SKIP    → peso  0.0 (no aporta información)
      */
-    @PostMapping("/oauth-register")
-    public ResponseEntity<UserProfileResponse> createOrFetchUser(
-            @Valid @RequestBody InternalUserCreateRequest request) {
-        
-        UserProfileResponse response = userService.createUserFromOAuth(request);
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private Reaction reaction;
 
-    @GetMapping("/{id}")
-    public ResponseEntity<UserResponseDTO> getUserById(@PathVariable UUID id) {
-        log.info("Database Microservice: Consultando perfil para usuario ID: {}", id);
-        return ResponseEntity.ok(userService.getUserProfile(id));
-    }
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
 
-    @PatchMapping("/{id}")
-    public ResponseEntity<UserResponseDTO> update(@PathVariable UUID id, @RequestBody UserUpdateRequest request) {
-        log.info("Database Controller: Recibida solicitud de actualización para usuario: {}", id);
-        UserResponseDTO response = userService.updateUserProfile(id, request);
-        return ResponseEntity.ok(response);
-    }
-
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        log.info("Database Controller: Recibida solicitud DELETE para ID: {}", id);
-        userService.deleteUser(id);
-        return ResponseEntity.noContent().build(); // 204 No Content
+    public enum Reaction {
+        LIKE, DISLIKE, SKIP
     }
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ProviderRepository.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Style.java
 
-package com.dressme.dressme_database.repository;
+package com.dressme.dressme_database.model;
 
-import com.dressme.dressme_database.model.Provider;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-import java.util.Optional;
+import jakarta.persistence.*;
+import lombok.*;
 import java.util.UUID;
 
-@Repository
-public interface ProviderRepository extends JpaRepository<Provider, UUID> {
-    Optional<Provider> findByName(String name);
+@Entity
+@Table(name = "tbl_styles")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Style {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 50)
+    private String name; 
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ColorRepository.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingColor.java
 
-package com.dressme.dressme_database.repository;
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothes_colors")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingColor {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clothes_id", nullable = false)
+    private Clothing clothing;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "color_id", nullable = false)
+    private Color color;
+
+    @Column(name = "is_primary")
+    private boolean isPrimary;
+
+    @Column(precision = 5, scale = 2) 
+    private BigDecimal percentage;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingCategory.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothing_categories")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingCategory {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 100)
+    private String name;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+
+    // Relación Autorreferenciada (Jerarquía)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private ClothingCategory parent;
+
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL)
+    private List<ClothingCategory> subcategories;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/User.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_users")
+@Getter
+@Setter
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false)
+    private String email;
+
+    @Column(name = "display_name")
+    private String displayName;
+
+    @Column(name = "profile_picture")
+    private String profilePicture;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingOutfit.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothes_outfits")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingOutfit {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clothes_id", nullable = false)
+    private Clothing clothing;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "outfit_id", nullable = false)
+    private Outfit outfit;
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/StyleCard.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import java.util.UUID;
+
+/**
+ * Representa una tarjeta visual de onboarding del estilo "¿Te gusta este look?".
+ *
+ * Cada tarjeta tiene una descripción semántica que OpenAI ya procesó y cuyo
+ * embedding vive en `embedding_vector`. Durante la Fase 2 (dressme-ai) este
+ * vector se usa para calcular el taste_vector del usuario.
+ */
+@Entity
+@Table(name = "tbl_style_cards")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class StyleCard {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    /**
+     * Nombre corto mostrado en la UI.
+     * Ej: "Minimalist", "Streetwear", "Bohemian".
+     */
+    @Column(unique = true, nullable = false, length = 100)
+    private String name;
+
+    /**
+     * Descripción semántica enviada a OpenAI text-embedding-3-small para
+     * generar el embedding_vector. Debe ser rica en keywords de moda.
+     */
+    @Column(name = "semantic_description", nullable = false, columnDefinition = "TEXT")
+    private String semanticDescription;
+
+    /**
+     * URL de la imagen representativa. En el MVP puede apuntar a recursos
+     * estáticos del frontend o a un CDN.
+     */
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private String imageUrl;
+
+    /**
+     * Tags de apoyo para filtros futuros. Almacenado como JSON string.
+     * Ej: '["neutral", "clean", "monochrome"]'
+     */
+    @Column(columnDefinition = "TEXT")
+    private String tags;
+
+    /**
+     * Vector pre-computado por OpenAI text-embedding-3-small (1536 dims).
+     * Se persiste una sola vez al hacer seed de los datos.
+     * NULL = embedding aún no generado (Fase 2 lo completa).
+     */
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(name = "embedding_vector", columnDefinition = "vector(1536)")
+    private float[] embeddingVector;
+
+    /**
+     * Orden de presentación en la pantalla de onboarding.
+     * Las tarjetas se muestran de menor a mayor display_order.
+     */
+    @Builder.Default
+    @Column(name = "display_order")
+    private Integer displayOrder = 0;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Occasion.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_occasions")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Occasion {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 50)
+    private String name; // Ejemplo: Office, Gym, Wedding, Casual Date
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Weather.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_weather")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Weather {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 50)
+    private String name; // Ejemplo: Sunny, Rainy, Snow, Heatwave
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingWeather.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothes_weather")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingWeather {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clothes_id", nullable = false)
+    private Clothing clothing;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "weather_id", nullable = false)
+    private Weather weather;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingAiAudit.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothing_ai_audit")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingAiAudit {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clothes_id", unique = true, nullable = false)
+    private Clothing clothing;
+
+    @Column(name = "confidence_score", precision = 3, scale = 2) 
+    private BigDecimal confidenceScore;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "predicted_category_id")
+    private ClothingCategory predictedCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "predicted_style_id")
+    private Style predictedStyle;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "predicted_color_id")
+    private Color predictedColor;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "predicted_weather_id")
+    private Weather predictedWeather;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "predicted_occasion_id")
+    private Occasion predictedOccasion;
+
+    @Builder.Default
+    @Column(name = "was_corrected")
+    private boolean wasCorrected = false;
+
+    @Column(name = "ai_provider")
+    private String aiProvider; // 'google_vision', 'clarifai'
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ColorCompatibility.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_color_compatibility")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ColorCompatibility {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne
+    @JoinColumn(name = "color_a_id", nullable = false)
+    private Color colorA;
+
+    @ManyToOne
+    @JoinColumn(name = "color_b_id", nullable = false)
+    private Color colorB;
+
+    @Column(name = "compatibility_score", nullable = false)
+    private Double compatibilityScore;
+
+    @Column(name = "created_at", updatable = false)
+    @Builder.Default
+    private java.time.LocalDateTime createdAt = java.time.LocalDateTime.now();
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/Provider.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_providers")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Provider {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 100)
+    private String name;
+
+    @Column(name = "auth_endpoint", columnDefinition = "TEXT")
+    private String authEndpoint;
+
+    @Column(name = "icon_url")
+    private String iconUrl;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/DressCode.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_dress_codes")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class DressCode {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @Column(unique = true, nullable = false, length = 150)
+    private String name;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String description;
+
+    // Representación matemática de 1536 dimensiones (OpenAI standard)
+    @JdbcTypeCode(SqlTypes.VECTOR)
+    @Column(name = "embedding_vector", columnDefinition = "vector(1536)", nullable = false)
+    private float[] embeddingVector;
+
+    @Builder.Default
+    @Column(name = "is_active")
+    private boolean isActive = true;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/model/ClothingStyle.java
+
+package com.dressme.dressme_database.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "tbl_clothes_styles")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClothingStyle {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clothes_id", nullable = false)
+    private Clothing clothing;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "style_id", nullable = false)
+    private Style style;
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/mapper/ColorMapper.java
+
+package com.dressme.dressme_database.mapper;
 
 import com.dressme.dressme_database.model.Color;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.dressme.dressme_database.schema.dto.ColorResponseDTO;
+import org.mapstruct.Mapper;
+import org.mapstruct.MappingConstants;
 
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
-public interface ColorRepository extends JpaRepository<Color, UUID> {
-    List<Color> findByIsNeutralFalse();
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING)
+public interface ColorMapper {
+    ColorResponseDTO toDto(Color color);
+    List<ColorResponseDTO> toDtoList(List<Color> colors);
 }
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserIdentityRepository.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/util/ColorTheoryUtils.java
 
-package com.dressme.dressme_database.repository;
+package com.dressme.dressme_database.util;
 
-import com.dressme.dressme_database.model.UserIdentity;
-import com.dressme.dressme_database.model.Provider;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-import java.util.Optional;
-import java.util.UUID;
+public class ColorTheoryUtils {
+    private static final int MAX_HUE = 360;
+    private static final int COMPLEMENTARY_SHIFT = 180;
+    private static final int ANALOGOUS_SHIFT = 30;
 
-@Repository
-public interface UserIdentityRepository extends JpaRepository<UserIdentity, UUID> {
-    // La consulta clave para el registro por OAuth - busca por la entidad Provider
-    Optional<UserIdentity> findByProviderAndProviderUserId(Provider provider, String providerUserId);
-    void deleteByUserId(UUID userId);
+    /* Margen de toleracia para encontrar un color similar en la DB
+        Ej: se busca un amarillo con Hue 65, pero en la DB tenemos
+        amarillo con Hue 60
+    */
+    private static final int HUE_TOLERANCE = 15;
+    //Constnte para nivelar la Saturación y Luminosidad (0-100) al nivel
+    //del Hue (180)
+    private static final double HSL_SCALE_FACTOR = 1.8;
+
+    //Scors de armonía cromática
+    public static final double ANALOGOUS_SCORE     = 0.80;
+    public static final double COMPLEMENTARY_SCORE = 0.70;
+    public static final double NO_HARMONY_SCORE    = 0.0;
+
+    private ColorTheoryUtils() {
+        throw new UnsupportedOperationException("Utility class");
+    }
+
+    public static int getComplementaryHue(int baseHue) {
+        return (baseHue + COMPLEMENTARY_SHIFT) % MAX_HUE;
+    }
+
+    public static int[] getAnalogousHues(int baseHue) {
+        int upper = (baseHue + ANALOGOUS_SHIFT) % MAX_HUE;
+        int lower = (baseHue - ANALOGOUS_SHIFT + MAX_HUE) % MAX_HUE;
+        return new int[]{upper, lower};
+    }
+
+    public static boolean isWithinTolerance(int currentHue, int targetHue) {
+        int circularDistance = ColorTheoryUtils.getCircularHueDistance(currentHue, targetHue);
+        return circularDistance <= HUE_TOLERANCE;
+    }
+
+    public static double calculateColorDistance(
+        int targetHue, int targetSaturation, int targetLightness,
+        int dbHue, int dbSaturation, int dbLightness){
+
+        int deltaH = ColorTheoryUtils.getCircularHueDistance(targetHue, dbHue);
+        double deltaS = Math.abs(targetSaturation -  dbSaturation) * HSL_SCALE_FACTOR;
+        double deltaL = Math.abs(targetLightness -  dbLightness) * HSL_SCALE_FACTOR;
+        return Math.sqrt(Math.pow(deltaH, 2) + Math.pow(deltaS, 2) + Math.pow(deltaL, 2));
+    }
+
+    public static int getCircularHueDistance(int hue1, int hue2){
+        int diff = Math.abs(hue1 - hue2);
+        return Math.min(diff, MAX_HUE - diff);
+    }
+
+    /*
+      *Calcula score de compatibilidad basado en la teoría del color
+      * cuando no existe un registro en la db.
+     */
+    public static double calculateHarmonyScore(int hue1, int hue2) {
+        int complementary = getComplementaryHue(hue1);
+        int[] analogous   = getAnalogousHues(hue1);
+
+        if (isWithinTolerance(hue2, complementary)) {
+            return COMPLEMENTARY_SCORE;
+        }
+        if (isWithinTolerance(hue2, analogous[0]) || isWithinTolerance(hue2, analogous[1])) {
+            return ANALOGOUS_SCORE;
+        }
+        return NO_HARMONY_SCORE;
+    }
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserTasteProfileRepository.java
 
-package com.dressme.dressme_database.repository;
-
-import com.dressme.dressme_database.model.UserTasteProfile;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
-import java.util.Optional;
-import java.util.UUID;
-
-@Repository
-public interface UserTasteProfileRepository extends JpaRepository<UserTasteProfile, UUID> {
-    Optional<UserTasteProfile> findByUserId(UUID userId);
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserRepository.java
-
-package com.dressme.dressme_database.repository;
-
-import com.dressme.dressme_database.model.User;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-import java.util.Optional;
-import java.util.UUID;
-
-@Repository
-public interface UserRepository extends JpaRepository<User, UUID> {
-    // Útil para validaciones cruzadas o búsquedas internas
-    Optional<User> findByEmail(String email);
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserUpdateRequest.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserUpdateRequest.java
 
 package com.dressme.dressme_database.schema.dto; 
 
@@ -1654,43 +2501,76 @@ public class UserUpdateRequest {
     private String profilePicture;
     private Boolean isCalibrated;
     private float[] tasteVector;
+    private String sourceType;  
 
     @JsonCreator // Obligamos a Jackson a usar este constructor
     public UserUpdateRequest(
         @JsonProperty("displayName") String displayName,
         @JsonProperty("profilePicture") String profilePicture,
         @JsonProperty("isCalibrated") Boolean isCalibrated,
-        @JsonProperty("tasteVector") float[] tasteVector
+        @JsonProperty("tasteVector") float[] tasteVector,
+        @JsonProperty("sourceType") String sourceType
     ) {
         this.displayName = displayName;
         this.profilePicture = profilePicture;
         this.isCalibrated = isCalibrated;
         this.tasteVector = tasteVector;
+        this.sourceType = sourceType;
     }
 
     public UserUpdateRequest() {} // Constructor vacío necesario
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserProfileResponse.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ErrorResponseDTO.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import java.time.LocalDateTime;
+
+public record ErrorResponseDTO(
+    LocalDateTime timestamp,
+    int status,
+    String error,
+    String message,
+    String path
+) {
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/StyleCardEmbeddingResponse.java
+
+package com.dressme.dressme_database.schema.dto;
+ 
+import java.util.UUID;
+ 
+public record StyleCardEmbeddingResponse(
+    UUID id,
+    String name,
+    float[] embeddingVector   // Los 1536 floats pre-computados
+) {}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ColorResponseDTO.java
 
 package com.dressme.dressme_database.schema.dto;
 
 import java.util.UUID;
 
-/**
- * DTO de salida: Seguro para ser expuesto y enviado de vuelta al Gateway/Frontend.
- */
-public record UserProfileResponse(
+public record ColorResponseDTO(
     UUID id,
-    String email,
-    String displayName,
-    String profilePicture,
-    boolean isCalibrated // Bandera útil para que el Frontend sepa si debe mostrar el onboarding
-) {}
+    String name,
+    Integer hue,
+    Integer saturation,
+    Integer lightness,
+    boolean neutral
+) {
+}
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserResponseDTO.java
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserResponseDTO.java
 
 package com.dressme.dressme_database.schema.dto;
 
@@ -1716,7 +2596,7 @@ public class UserResponseDTO {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/InternalUserCreateRequest.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/InternalUserCreateRequest.java
 
 package com.dressme.dressme_database.schema.dto;
 
@@ -1750,142 +2630,105 @@ public record InternalUserCreateRequest(
 ) {}
 
 
-=== Módulo Java: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java ===
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/OnboardingSelectionRequest.java
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/service/UserService.java
+package com.dressme.dressme_database.schema.dto;
+ 
+import com.dressme.dressme_database.model.UserOnboardingSelection.Reaction;
+import jakarta.validation.constraints.NotNull;
+ 
+import java.util.List;
+import java.util.UUID;
+ 
+public record OnboardingSelectionRequest(
+ 
+    @NotNull(message = "El userId es obligatorio")
+    UUID userId,
+ 
+    @NotNull(message = "Debe incluir al menos una selección")
+    List<SelectionItem> selections
+ 
+) {
+    public record SelectionItem(
+ 
+        @NotNull(message = "El styleCardId es obligatorio")
+        UUID styleCardId,
+ 
+        @NotNull(message = "La reacción es obligatoria (LIKE, DISLIKE, SKIP)")
+        Reaction reaction
+ 
+    ) {}
+}
 
-package com.dressme.dressme_gateway.service;
 
-import com.dressme.dressme_gateway.schema.dto.UserResponseDTO;
-import com.dressme.dressme_gateway.schema.dto.UserUpdateRequest;
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/StyleCardDTO.java
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+package com.dressme.dressme_database.schema.dto;
+ 
+import java.util.UUID;
+ 
+public record StyleCardDTO(
+    UUID id,
+    String name,
+    String semanticDescription,
+    String imageUrl,
+    String tags,
+    Integer displayOrder
+) {}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ColorCompatibilityRequestDTO.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
+public record ColorCompatibilityRequestDTO(
+    @Min(0)   @Max(360) int hue1,
+    @Min(0)   @Max(100) int saturation1,
+    @Min(0)   @Max(100) int lightness1,
+    @Min(0)   @Max(360) int hue2,
+    @Min(0)   @Max(100) int saturation2,
+    @Min(0)   @Max(100) int lightness2
+) {
+}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/CompatibilityResponseDTO.java
+
+package com.dressme.dressme_database.schema.dto;
+
+public record CompatibilityResponseDTO(
+    ColorResponseDTO colorA,
+    ColorResponseDTO colorB,
+    double compatibilityScore
+){}
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserProfileResponse.java
+
+package com.dressme.dressme_database.schema.dto;
+
 import java.util.UUID;
 
-@Service
-@Slf4j
-public class UserService {
-
-    private final RestClient restClient;
-
-    public UserService(RestClient.Builder restClientBuilder) {
-        // Apuntamos al nombre del servicio orquestador en la red de Docker
-        this.restClient = restClientBuilder.baseUrl("http://dressme-back:8080").build();
-    }
-
-    public UserResponseDTO getUserProfile(UUID userId) {
-        log.info("Gateway: Solicitando perfil completo al Orquestador para ID: {}", userId);
-        
-        return restClient.get()
-                .uri("/internal/orchestrate/profile/{id}", userId)
-                .retrieve()
-                .body(UserResponseDTO.class);
-    }
-
-    public UserResponseDTO updateUserProfile(UUID userId, UserUpdateRequest request) {
-        log.info("Gateway-Service: Enviando actualización al Orquestador para ID: {}", userId);
-        
-        return restClient.patch()
-                .uri("http://dressme-back:8080/internal/orchestrate/profile/{id}", userId)
-                .body(request)
-                .retrieve()
-                .body(UserResponseDTO.class);
-    }
-
-    public void deleteUserProfile(UUID userId) {
-        log.info("Gateway-Service: Comunicando baja de usuario al Back para ID: {}", userId);
-        
-        restClient.delete()
-                .uri("http://dressme-back:8080/internal/orchestrate/profile/{id}", userId)
-                .retrieve()
-                .toBodilessEntity();
-    }
-}
+/**
+ * DTO de salida: Seguro para ser expuesto y enviado de vuelta al Gateway/Frontend.
+ */
+public record UserProfileResponse(
+    UUID id,
+    String email,
+    String displayName,
+    String profilePicture,
+    boolean isCalibrated // Bandera útil para que el Frontend sepa si debe mostrar el onboarding
+) {}
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/service/OAuthProviderService.java
+=== Módulo Java: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java ===
 
-package com.dressme.dressme_gateway.service;
-
-import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
-import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
-
-public interface OAuthProviderService {
-    StandardizedUserProviderInfo validateAndExtractUserInfo(OAuthLoginRequest request);
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/service/impl/OAuthProviderServiceImpl.java
-
-package com.dressme.dressme_gateway.service.impl;
-
-import com.dressme.dressme_gateway.infra.exception.InvalidOAuthTokenException;
-import com.dressme.dressme_gateway.schema.dto.GoogleUserInfoResponse;
-import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
-import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
-import com.dressme.dressme_gateway.service.OAuthProviderService;
-
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
-
-@Service
-public class OAuthProviderServiceImpl implements OAuthProviderService {
-
-    private final RestClient restClient;
-
-    // Inyectamos el builder moderno de Spring Boot 3
-    public OAuthProviderServiceImpl(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.build();
-    }
-
-    @Override
-    public StandardizedUserProviderInfo validateAndExtractUserInfo(OAuthLoginRequest request) {
-        return switch (request.provider().toUpperCase()) {
-            case "GOOGLE" -> validateGoogleToken(request.token());
-            case "PINTEREST" -> validatePinterestToken(request.token());
-            default -> throw new IllegalArgumentException("Proveedor de autenticación no soportado: " + request.provider());
-        };
-    }
-
-    private StandardizedUserProviderInfo validateGoogleToken(String idToken) {
-        try {
-            // Llamada síncrona a la API pública de validación de Google
-            GoogleUserInfoResponse googleResponse = restClient.get()
-                    .uri("https://oauth2.googleapis.com/tokeninfo?id_token={token}", idToken)
-                    .retrieve()
-                    .body(GoogleUserInfoResponse.class);
-
-            if (googleResponse == null || googleResponse.email() == null) {
-                throw new InvalidOAuthTokenException("El token de Google no contiene información válida");
-            }
-
-            // Estandarización de la respuesta para el uso interno de DressMe
-            return new StandardizedUserProviderInfo(
-                    "GOOGLE",
-                    googleResponse.providerId(),
-                    googleResponse.email(),
-                    googleResponse.displayName(),
-                    googleResponse.profilePictureUrl()
-            );
-
-        } catch (RestClientResponseException e) {
-            // Si Google responde con un 400 Bad Request, el token expiró o es falso
-            throw new InvalidOAuthTokenException("Token de Google inválido, expirado o mal formado", e);
-        }
-    }
-
-    private StandardizedUserProviderInfo validatePinterestToken(String accessToken) {
-        // TODO: Implementar la validación con la API de Pinterest en una iteración futura.
-        // Pinterest requiere un enfoque distinto enviando el Access Token en el Header de Autorización.
-        throw new UnsupportedOperationException("La validación con Pinterest aún está en construcción");
-    }
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/DressmeGatewayApplication.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/DressmeGatewayApplication.java
 
 package com.dressme.dressme_gateway;
 
@@ -1903,241 +2746,7 @@ public class DressmeGatewayApplication {
 
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/controller/UserController.java
-
-package com.dressme.dressme_gateway.controller;
-
-import com.dressme.dressme_gateway.schema.dto.UserResponseDTO;
-import com.dressme.dressme_gateway.schema.dto.UserUpdateRequest;
-import com.dressme.dressme_gateway.service.UserService;
-
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import java.util.UUID;
-
-
-@RestController
-@RequestMapping("/api/v1/users")
-@RequiredArgsConstructor
-@Slf4j
-public class UserController {
-
-    private final UserService userService;
-
-    @GetMapping("/profile/{id}")
-    public ResponseEntity<UserResponseDTO> getUserProfile(@PathVariable UUID id) {
-        log.info("Gateway-Controller: Recibida petición pública de perfil para ID: {}", id);
-        return ResponseEntity.ok(userService.getUserProfile(id));
-    }
-
-    @PatchMapping("/profile/{id}")
-    public ResponseEntity<UserResponseDTO> update(
-            @PathVariable UUID id, 
-            @RequestBody UserUpdateRequest request) {
-        
-        if (request.getDisplayName() == null && request.getIsCalibrated() == null) {
-            log.error("GATEWAY CRITICAL: Jackson falló al mapear el JSON. Campos recibidos como NULL.");
-        }
-
-        log.info("GATEWAY DEBUG FINAL: ID={}, Name={}, Calib={}", 
-                id, request.getDisplayName(), request.getIsCalibrated());
-                
-        return ResponseEntity.ok(userService.updateUserProfile(id, request));
-    }
-
-    @DeleteMapping("/profile/{id}")
-    public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        log.info("Gateway-Controller: Ejecutando DELETE público para usuario: {}", id);
-        userService.deleteUserProfile(id);
-        return ResponseEntity.noContent().build();
-    }
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/controller/AuthController.java
-
-package com.dressme.dressme_gateway.controller;
-
-import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
-import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
-import com.dressme.dressme_gateway.service.OAuthProviderService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestClient;
-
-@RestController
-@RequestMapping("/api/v1/auth")
-@RequiredArgsConstructor
-public class AuthController {
-
-    private final OAuthProviderService providerService;
-    // Usamos RestClient para comunicarnos internamente con nuestro ecosistema
-    private final RestClient restClient; 
-
-    /**
-     * Endpoint PÚBLICO: El Frontend envía el token de Google/Pinterest aquí.
-     */
-    @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@Valid @RequestBody OAuthLoginRequest request) {
-        
-        // 1. Validar el token contra los servidores externos (Google/Pinterest)
-        // Si el token es falso o expiró, esto lanzará InvalidOAuthTokenException (HTTP 401)
-        StandardizedUserProviderInfo userInfo = providerService.validateAndExtractUserInfo(request);
-
-        // 2. Comunicación Interna: Enviar la data validada a dressme-back (El Orquestador)
-        // Nota Arquitectónica: Aquí el Gateway actúa como Proxy Reverso con lógica.
-        // Asumimos que dressme-back está corriendo en la red interna de Docker (ej. http://dressme-back:8080)
-        
-        ResponseEntity<Object> backResponse = restClient.post()
-                .uri("http://dressme-back:8080/internal/orchestrate/login") // URI de la red interna
-                .body(userInfo)
-                .retrieve()
-                // .toEntity(Object.class) nos permite devolver al frontend exactamente 
-                // lo que el orquestador decida (ej. un JWT propio de nuestra app, datos del perfil, etc.)
-                .toEntity(Object.class); 
-
-        return ResponseEntity.status(backResponse.getStatusCode()).body(backResponse.getBody());
-    }
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/UserUpdateRequest.java
-
-package com.dressme.dressme_gateway.schema.dto; // Ajusta el paquete según el servicio
-
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Builder;
-import lombok.Data;
-
-@Data
-@Builder
-public class UserUpdateRequest {
-    private String displayName;
-    private String profilePicture;
-    private Boolean isCalibrated;
-    private float[] tasteVector;
-
-    @JsonCreator // Obligamos a Jackson a usar este constructor
-    public UserUpdateRequest(
-        @JsonProperty("displayName") String displayName,
-        @JsonProperty("profilePicture") String profilePicture,
-        @JsonProperty("isCalibrated") Boolean isCalibrated,
-        @JsonProperty("tasteVector") float[] tasteVector
-    ) {
-        this.displayName = displayName;
-        this.profilePicture = profilePicture;
-        this.isCalibrated = isCalibrated;
-        this.tasteVector = tasteVector;
-    }
-
-    public UserUpdateRequest() {} // Constructor vacío necesario
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/UserResponseDTO.java
-
-package com.dressme.dressme_gateway.schema.dto;
-
-import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
-import java.util.UUID;
-
-@Data
-public class UserResponseDTO {
-    private UUID id;
-    private String email;
-    private String displayName;
-    private String profilePicture;
-    @JsonProperty("isCalibrated")
-    private boolean isCalibrated;
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/OAuthLoginRequest.java
-
-package com.dressme.dressme_gateway.schema.dto;
-
-import jakarta.validation.constraints.NotBlank;
-
-public record OAuthLoginRequest(
-    @NotBlank(message = "El proveedor es obligatorio (ej. GOOGLE, PINTEREST)")
-    String provider,
-    
-    @NotBlank(message = "El token de acceso o ID token provisto por el frontend es obligatorio")
-    String token
-) {}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/StandardizedUserProviderInfo.java
-
-package com.dressme.dressme_gateway.schema.dto;
-
-/**
- * Contrato estandarizado que el Gateway construirá y enviará internamente 
- * hacia dressme-back, sin importar de qué proveedor provengan los datos.
- */
-public record StandardizedUserProviderInfo(
-    String provider, // "GOOGLE" o "PINTEREST"
-    String providerId,
-    String email,
-    String displayName,
-    String profilePictureUrl
-) {}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/GoogleUserInfoResponse.java
-
-package com.dressme.dressme_gateway.schema.dto;
-
-import com.fasterxml.jackson.annotation.JsonProperty;
-
-/**
- * Mapeo estricto de la respuesta de la API de validación de Google.
- */
-public record GoogleUserInfoResponse(
-    @JsonProperty("sub") String providerId,       // El ID único e inmutable del usuario en Google
-    @JsonProperty("email") String email,
-    @JsonProperty("name") String displayName,
-    @JsonProperty("picture") String profilePictureUrl,
-    @JsonProperty("email_verified") String emailVerified
-) {}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/infra/exception/InvalidOAuthTokenException.java
-
-package com.dressme.dressme_gateway.infra.exception;
-
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
-
-@ResponseStatus(HttpStatus.UNAUTHORIZED)
-public class InvalidOAuthTokenException extends RuntimeException {
-    public InvalidOAuthTokenException(String message) {
-        super(message);
-    }
-    
-    public InvalidOAuthTokenException(String message, Throwable cause) {
-        super(message, cause);
-    }
-}
-
-
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/config/SecurityConfig.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/config/SecurityConfig.java
 
 package com.dressme.dressme_gateway.config;
 
@@ -2234,7 +2843,7 @@ public class SecurityConfig {
 }
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/config/RestClientConfig.java
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/config/RestClientConfig.java
 
 package com.dressme.dressme_gateway.config;
 
@@ -2257,29 +2866,1468 @@ public class RestClientConfig {
 }
 
 
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/controller/AuthController.java
+
+package com.dressme.dressme_gateway.controller;
+
+import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
+import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
+import com.dressme.dressme_gateway.service.OAuthProviderService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestClient;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final OAuthProviderService providerService;
+    // Usamos RestClient para comunicarnos internamente con nuestro ecosistema
+    private final RestClient restClient; 
+
+    /**
+     * Endpoint PÚBLICO: El Frontend envía el token de Google/Pinterest aquí.
+     */
+    @PostMapping("/login")
+    public ResponseEntity<?> authenticateUser(@Valid @RequestBody OAuthLoginRequest request) {
+        
+        // 1. Validar el token contra los servidores externos (Google/Pinterest)
+        // Si el token es falso o expiró, esto lanzará InvalidOAuthTokenException (HTTP 401)
+        StandardizedUserProviderInfo userInfo = providerService.validateAndExtractUserInfo(request);
+
+        // 2. Comunicación Interna: Enviar la data validada a dressme-back (El Orquestador)
+        // Nota Arquitectónica: Aquí el Gateway actúa como Proxy Reverso con lógica.
+        // Asumimos que dressme-back está corriendo en la red interna de Docker (ej. http://dressme-back:8080)
+        
+        ResponseEntity<Object> backResponse = restClient.post()
+                .uri("http://dressme-back:8080/internal/orchestrate/login") // URI de la red interna
+                .body(userInfo)
+                .retrieve()
+                // .toEntity(Object.class) nos permite devolver al frontend exactamente 
+                // lo que el orquestador decida (ej. un JWT propio de nuestra app, datos del perfil, etc.)
+                .toEntity(Object.class); 
+
+        return ResponseEntity.status(backResponse.getStatusCode()).body(backResponse.getBody());
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/controller/UserController.java
+
+package com.dressme.dressme_gateway.controller;
+
+import com.dressme.dressme_gateway.schema.dto.UserResponseDTO;
+import com.dressme.dressme_gateway.schema.dto.UserUpdateRequest;
+import com.dressme.dressme_gateway.service.UserService;
+
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.UUID;
+
+
+@RestController
+@RequestMapping("/api/v1/users")
+@RequiredArgsConstructor
+@Slf4j
+public class UserController {
+
+    private final UserService userService;
+
+    @GetMapping("/profile/{id}")
+    public ResponseEntity<UserResponseDTO> getUserProfile(@PathVariable UUID id) {
+        log.info("Gateway-Controller: Recibida petición pública de perfil para ID: {}", id);
+        return ResponseEntity.ok(userService.getUserProfile(id));
+    }
+
+    @PatchMapping("/profile/{id}")
+    public ResponseEntity<UserResponseDTO> update(
+            @PathVariable UUID id, 
+            @RequestBody UserUpdateRequest request) {
+        
+        if (request.getDisplayName() == null && request.getIsCalibrated() == null) {
+            log.error("GATEWAY CRITICAL: Jackson falló al mapear el JSON. Campos recibidos como NULL.");
+        }
+
+        log.info("GATEWAY DEBUG FINAL: ID={}, Name={}, Calib={}", 
+                id, request.getDisplayName(), request.getIsCalibrated());
+                
+        return ResponseEntity.ok(userService.updateUserProfile(id, request));
+    }
+
+    @DeleteMapping("/profile/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        log.info("Gateway-Controller: Ejecutando DELETE público para usuario: {}", id);
+        userService.deleteUserProfile(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/infra/exception/InvalidOAuthTokenException.java
+
+package com.dressme.dressme_gateway.infra.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+@ResponseStatus(HttpStatus.UNAUTHORIZED)
+public class InvalidOAuthTokenException extends RuntimeException {
+    public InvalidOAuthTokenException(String message) {
+        super(message);
+    }
+    
+    public InvalidOAuthTokenException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/service/OAuthProviderService.java
+
+package com.dressme.dressme_gateway.service;
+
+import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
+import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
+
+public interface OAuthProviderService {
+    StandardizedUserProviderInfo validateAndExtractUserInfo(OAuthLoginRequest request);
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/service/UserService.java
+
+package com.dressme.dressme_gateway.service;
+
+import com.dressme.dressme_gateway.schema.dto.UserResponseDTO;
+import com.dressme.dressme_gateway.schema.dto.UserUpdateRequest;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import java.util.UUID;
+
+@Service
+@Slf4j
+public class UserService {
+
+    private final RestClient restClient;
+
+    public UserService(RestClient.Builder restClientBuilder) {
+        // Apuntamos al nombre del servicio orquestador en la red de Docker
+        this.restClient = restClientBuilder.baseUrl("http://dressme-back:8080").build();
+    }
+
+    public UserResponseDTO getUserProfile(UUID userId) {
+        log.info("Gateway: Solicitando perfil completo al Orquestador para ID: {}", userId);
+        
+        return restClient.get()
+                .uri("/internal/orchestrate/profile/{id}", userId)
+                .retrieve()
+                .body(UserResponseDTO.class);
+    }
+
+    public UserResponseDTO updateUserProfile(UUID userId, UserUpdateRequest request) {
+        log.info("Gateway-Service: Enviando actualización al Orquestador para ID: {}", userId);
+        
+        return restClient.patch()
+                .uri("http://dressme-back:8080/internal/orchestrate/profile/{id}", userId)
+                .body(request)
+                .retrieve()
+                .body(UserResponseDTO.class);
+    }
+
+    public void deleteUserProfile(UUID userId) {
+        log.info("Gateway-Service: Comunicando baja de usuario al Back para ID: {}", userId);
+        
+        restClient.delete()
+                .uri("http://dressme-back:8080/internal/orchestrate/profile/{id}", userId)
+                .retrieve()
+                .toBodilessEntity();
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/service/impl/OAuthProviderServiceImpl.java
+
+package com.dressme.dressme_gateway.service.impl;
+
+import com.dressme.dressme_gateway.infra.exception.InvalidOAuthTokenException;
+import com.dressme.dressme_gateway.schema.dto.GoogleUserInfoResponse;
+import com.dressme.dressme_gateway.schema.dto.OAuthLoginRequest;
+import com.dressme.dressme_gateway.schema.dto.StandardizedUserProviderInfo;
+import com.dressme.dressme_gateway.service.OAuthProviderService;
+
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
+
+@Service
+public class OAuthProviderServiceImpl implements OAuthProviderService {
+
+    private final RestClient restClient;
+
+    // Inyectamos el builder moderno de Spring Boot 3
+    public OAuthProviderServiceImpl(RestClient.Builder restClientBuilder) {
+        this.restClient = restClientBuilder.build();
+    }
+
+    @Override
+    public StandardizedUserProviderInfo validateAndExtractUserInfo(OAuthLoginRequest request) {
+        return switch (request.provider().toUpperCase()) {
+            case "GOOGLE" -> validateGoogleToken(request.token());
+            case "PINTEREST" -> validatePinterestToken(request.token());
+            default -> throw new IllegalArgumentException("Proveedor de autenticación no soportado: " + request.provider());
+        };
+    }
+
+    private StandardizedUserProviderInfo validateGoogleToken(String idToken) {
+        try {
+            // Llamada síncrona a la API pública de validación de Google
+            GoogleUserInfoResponse googleResponse = restClient.get()
+                    .uri("https://oauth2.googleapis.com/tokeninfo?id_token={token}", idToken)
+                    .retrieve()
+                    .body(GoogleUserInfoResponse.class);
+
+            if (googleResponse == null || googleResponse.email() == null) {
+                throw new InvalidOAuthTokenException("El token de Google no contiene información válida");
+            }
+
+            // Estandarización de la respuesta para el uso interno de DressMe
+            return new StandardizedUserProviderInfo(
+                    "GOOGLE",
+                    googleResponse.providerId(),
+                    googleResponse.email(),
+                    googleResponse.displayName(),
+                    googleResponse.profilePictureUrl()
+            );
+
+        } catch (RestClientResponseException e) {
+            // Si Google responde con un 400 Bad Request, el token expiró o es falso
+            throw new InvalidOAuthTokenException("Token de Google inválido, expirado o mal formado", e);
+        }
+    }
+
+    private StandardizedUserProviderInfo validatePinterestToken(String accessToken) {
+        // TODO: Implementar la validación con la API de Pinterest en una iteración futura.
+        // Pinterest requiere un enfoque distinto enviando el Access Token en el Header de Autorización.
+        throw new UnsupportedOperationException("La validación con Pinterest aún está en construcción");
+    }
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/OAuthLoginRequest.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record OAuthLoginRequest(
+    @NotBlank(message = "El proveedor es obligatorio (ej. GOOGLE, PINTEREST)")
+    String provider,
+    
+    @NotBlank(message = "El token de acceso o ID token provisto por el frontend es obligatorio")
+    String token
+) {}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/UserUpdateRequest.java
+
+package com.dressme.dressme_gateway.schema.dto; // Ajusta el paquete según el servicio
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class UserUpdateRequest {
+    private String displayName;
+    private String profilePicture;
+    private Boolean isCalibrated;
+    private float[] tasteVector;
+
+    @JsonCreator // Obligamos a Jackson a usar este constructor
+    public UserUpdateRequest(
+        @JsonProperty("displayName") String displayName,
+        @JsonProperty("profilePicture") String profilePicture,
+        @JsonProperty("isCalibrated") Boolean isCalibrated,
+        @JsonProperty("tasteVector") float[] tasteVector
+    ) {
+        this.displayName = displayName;
+        this.profilePicture = profilePicture;
+        this.isCalibrated = isCalibrated;
+        this.tasteVector = tasteVector;
+    }
+
+    public UserUpdateRequest() {} // Constructor vacío necesario
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/UserResponseDTO.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
+import java.util.UUID;
+
+@Data
+public class UserResponseDTO {
+    private UUID id;
+    private String email;
+    private String displayName;
+    private String profilePicture;
+    @JsonProperty("isCalibrated")
+    private boolean isCalibrated;
+}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/GoogleUserInfoResponse.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+/**
+ * Mapeo estricto de la respuesta de la API de validación de Google.
+ */
+public record GoogleUserInfoResponse(
+    @JsonProperty("sub") String providerId,       // El ID único e inmutable del usuario en Google
+    @JsonProperty("email") String email,
+    @JsonProperty("name") String displayName,
+    @JsonProperty("picture") String profilePictureUrl,
+    @JsonProperty("email_verified") String emailVerified
+) {}
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/StandardizedUserProviderInfo.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+/**
+ * Contrato estandarizado que el Gateway construirá y enviará internamente 
+ * hacia dressme-back, sin importar de qué proveedor provengan los datos.
+ */
+public record StandardizedUserProviderInfo(
+    String provider, // "GOOGLE" o "PINTEREST"
+    String providerId,
+    String email,
+    String displayName,
+    String profilePictureUrl
+) {}
+
+
 
 
 === CÓDIGO PYTHON ===
 
-=== Módulo Python: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai ===
+=== Módulo Python: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai ===
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/main.py
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/schemas/onboarding.py
 
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+from uuid import UUID
+
+
+class EmbeddingItem(BaseModel):
+    """
+    Representa una tarjeta y su reacción dentro del payload de calibración.
+
+    style_card_id  → UUID de la tarjeta (para trazabilidad en logs)
+    embedding      → Los 1536 floats pre-computados de esa tarjeta
+    reaction       → Lo que el usuario expresó: LIKE | DISLIKE | SKIP
+    """
+    style_card_id: UUID
+    embedding: list[float] = Field(..., min_length=1536, max_length=1536)
+    reaction: Literal["LIKE", "DISLIKE", "SKIP"]
+
+    @field_validator("embedding")
+    @classmethod
+    def embedding_must_be_1536(cls, v: list[float]) -> list[float]:
+        if len(v) != 1536:
+            raise ValueError(
+                f"El embedding debe tener exactamente 1536 dimensiones, recibió {len(v)}"
+            )
+        return v
+
+
+class ComputeTasteVectorRequest(BaseModel):
+    """
+    Payload que envía dressme-back al endpoint POST /ai/onboarding/compute-taste-vector.
+
+    user_id    → Para logs y trazabilidad. El vector resultante se devuelve
+                 y es dressme-back quien lo persiste via PATCH a dressme-database.
+    selections → Lista de tarjetas con su embedding y reacción del usuario.
+                 Mínimo 1 selección (aunque en la práctica serán 8-12).
+    """
+    user_id: UUID
+    selections: list[EmbeddingItem] = Field(..., min_length=1)
+
+
+
+class StyleCardInput(BaseModel):
+    """
+    Tarjeta a la que se le quiere generar el embedding.
+
+    id                   → UUID que se reenvía en la respuesta para que
+                           dressme-back pueda hacer el UPDATE correcto.
+    semantic_description → El texto que se manda a OpenAI. Es la descripción
+                           semántica rica en keywords de moda que sembramos
+                           en data.sql.
+    """
+    id: UUID
+    semantic_description: str = Field(..., min_length=10)
+
+
+class GenerateEmbeddingsRequest(BaseModel):
+    """
+    Payload para POST /ai/onboarding/generate-embeddings.
+    Recibe todas las tarjetas de una vez para hacer una sola llamada
+    batch a OpenAI en lugar de N llamadas individuales.
+    """
+    style_cards: list[StyleCardInput] = Field(..., min_length=1)
+
+
+class ComputeTasteVectorResponse(BaseModel):
+    """
+    Respuesta del cálculo del taste vector.
+
+    user_id         → Echo del user_id recibido (facilita el debug end-to-end)
+    taste_vector    → Los 1536 floats del vector resultante normalizado.
+                      dressme-back lo toma y hace PATCH /internal/users/{id}
+    cards_used      → Cuántas tarjetas contribuyeron al vector
+                      (las SKIP tienen peso 0, así que no "contribuyen"
+                       pero sí cuentan en el total procesado)
+    likes_count     → Señales positivas usadas
+    dislikes_count  → Señales negativas usadas
+    """
+    user_id: UUID
+    taste_vector: list[float]
+    cards_used: int
+    likes_count: int
+    dislikes_count: int
+
+
+
+class StyleCardEmbeddingResult(BaseModel):
+    """Un embedding generado, listo para persistir en tbl_style_cards."""
+    id: UUID
+    embedding_vector: list[float]
+
+
+class GenerateEmbeddingsResponse(BaseModel):
+    """
+    Respuesta del endpoint de generación de embeddings.
+    Devuelve los embeddings de todas las tarjetas procesadas.
+    """
+    embeddings: list[StyleCardEmbeddingResult]
+    model_used: str          # Ej: "text-embedding-3-small"
+    total_processed: int
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/schemas/__init__.py
+
+"""schemas"""
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/services/embedding_service.py
+
+"""
+services/embedding_service.py
+──────────────────────────────
+Genera embeddings de texto usando OpenAI text-embedding-3-small.
+
+Responsabilidades:
+  - Llamar a la API de OpenAI en modo batch (una sola llamada para N tarjetas)
+  - Mapear la respuesta al schema interno StyleCardEmbeddingResult
+  - Manejar errores de la API con mensajes claros
+
+Por qué text-embedding-3-small y no large:
+  - small  → 1536 dims, ~6x más barato, latencia menor. Suficiente para moda.
+  - large  → 3072 dims, más preciso para semántica muy fina (código, ciencia).
+  El taste_vector ya está definido como vector(1536) en DB, así que small es
+  el modelo correcto y no hay que cambiar el schema.
+"""
+
+import logging
+from openai import OpenAI
+from schemas.onboarding import (
+    GenerateEmbeddingsRequest,
+    GenerateEmbeddingsResponse,
+    StyleCardEmbeddingResult,
+)
+
+logger = logging.getLogger(__name__)
+
+EMBEDDING_MODEL = "text-embedding-3-small"
+EXPECTED_DIMENSIONS = 1536
+
+
+class EmbeddingService:
+
+    def __init__(self, openai_client: OpenAI):
+        """
+        Recibe el cliente de OpenAI por inyección.
+        Esto facilita el testing: en tests se puede pasar un cliente mock
+        sin tocar variables de entorno ni hacer llamadas reales.
+        """
+        self.client = openai_client
+
+    def generate_for_style_cards(
+        self, request: GenerateEmbeddingsRequest
+    ) -> GenerateEmbeddingsResponse:
+        """
+        Genera embeddings para una lista de style cards en una sola llamada batch.
+
+        La API de OpenAI acepta una lista de strings en el campo `input`.
+        Devuelve los embeddings en el mismo orden, así que podemos hacer
+        zip(request.style_cards, response.data) de forma segura.
+        """
+        logger.info(
+            "EmbeddingService: Generando embeddings para %d tarjetas con modelo %s",
+            len(request.style_cards),
+            EMBEDDING_MODEL,
+        )
+
+        # Extraer los textos en el mismo orden que las tarjetas
+        texts = [card.semantic_description for card in request.style_cards]
+
+        # ── Llamada batch a OpenAI ────────────────────────────────────────────
+        # Una sola llamada para todas las tarjetas. Mucho más eficiente
+        # que N llamadas individuales, y más barato en términos de tokens.
+        response = self.client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=texts,
+        )
+
+        # ── Validación de la respuesta ────────────────────────────────────────
+        if len(response.data) != len(request.style_cards):
+            raise ValueError(
+                f"OpenAI devolvió {len(response.data)} embeddings "
+                f"pero se enviaron {len(request.style_cards)} textos. "
+                "La respuesta está incompleta."
+            )
+
+        # ── Mapeo a schema interno ────────────────────────────────────────────
+        # response.data está ordenado por índice, igual que request.style_cards
+        results: list[StyleCardEmbeddingResult] = []
+
+        for card, embedding_obj in zip(request.style_cards, response.data):
+            vector = embedding_obj.embedding
+
+            # Sanidad: OpenAI siempre devuelve 1536 para este modelo,
+            # pero lo validamos explícitamente para detectar cambios de API.
+            if len(vector) != EXPECTED_DIMENSIONS:
+                raise ValueError(
+                    f"Embedding para tarjeta '{card.id}' tiene {len(vector)} dims, "
+                    f"se esperaban {EXPECTED_DIMENSIONS}. "
+                    f"¿Cambió el modelo de {EMBEDDING_MODEL}?"
+                )
+
+            results.append(
+                StyleCardEmbeddingResult(
+                    id=card.id,
+                    embedding_vector=vector,
+                )
+            )
+            logger.debug("EmbeddingService: Embedding generado para tarjeta %s", card.id)
+
+        logger.info(
+            "EmbeddingService: %d embeddings generados correctamente", len(results)
+        )
+
+        return GenerateEmbeddingsResponse(
+            embeddings=results,
+            model_used=EMBEDDING_MODEL,
+            total_processed=len(results),
+        )
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/services/taste_vector_service.py
+
+import logging
+import numpy as np
+from schemas.onboarding import (
+    ComputeTasteVectorRequest,
+    ComputeTasteVectorResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+# ── Pesos por reacción ────────────────────────────────────────────────────────
+# Estos valores definen cuánto influye cada tipo de reacción en el vector final.
+#
+# LIKE    → señal fuerte positiva: "quiero looks así"
+# DISLIKE → señal negativa suave: no penalizamos duro para no distorsionar
+#            el vector con pocas dislikes
+# SKIP    → sin información: el usuario no tuvo opinión, no suma ni resta
+#
+REACTION_WEIGHTS: dict[str, float] = {
+    "LIKE": 1.0,
+    "DISLIKE": -0.3,
+    "SKIP": 0.0,
+}
+
+
+class TasteVectorService:
+
+    def compute(self, request: ComputeTasteVectorRequest) -> ComputeTasteVectorResponse:
+        """
+        Calcula el taste vector del usuario a partir de sus selecciones.
+
+        Algoritmo:
+          1. Construir una matriz (N × 1536) con los embeddings de las tarjetas.
+          2. Construir un vector de pesos (N,) con los valores de REACTION_WEIGHTS.
+          3. Calcular el promedio ponderado: sumar (embedding_i × peso_i) para todo i.
+          4. Normalizar el resultado a longitud unitaria (norma L2).
+             La normalización es crucial: permite comparar el taste_vector del usuario
+             con los embeddings de sus prendas usando cosine similarity, que es la
+             métrica estándar para espacios de embeddings de OpenAI.
+
+        Caso borde — vector cero:
+          Si todos los pesos son SKIP o las dislikes cancelan exactamente a los likes,
+          el vector resultante antes de normalizar es el vector cero [0,0,...,0].
+          Normalizar el vector cero es una división por cero, así que en ese caso
+          devolvemos el vector cero directamente. dressme-back interpretará esto como
+          "no hay información suficiente" y podrá pedirle al usuario más selecciones.
+        """
+        logger.info(
+            "TasteVectorService: Calculando vector para usuario %s con %d selecciones",
+            request.user_id,
+            len(request.selections),
+        )
+
+        # ── Paso 1: separar embeddings y pesos ───────────────────────────────
+        embeddings: list[list[float]] = []
+        weights: list[float] = []
+        likes_count = 0
+        dislikes_count = 0
+
+        for item in request.selections:
+            embeddings.append(item.embedding)
+            weight = REACTION_WEIGHTS[item.reaction]
+            weights.append(weight)
+
+            if item.reaction == "LIKE":
+                likes_count += 1
+            elif item.reaction == "DISLIKE":
+                dislikes_count += 1
+
+        # ── Paso 2: construir estructuras numpy ───────────────────────────────
+        # matrix shape: (N, 1536)  →  cada fila es el embedding de una tarjeta
+        # weight_vec shape: (N,)   →  cada valor es el peso de esa tarjeta
+        matrix = np.array(embeddings, dtype=np.float32)       # (N, 1536)
+        weight_vec = np.array(weights, dtype=np.float32)       # (N,)
+
+        # ── Paso 3: promedio ponderado ────────────────────────────────────────
+        # weight_vec[:, np.newaxis] expande (N,) a (N, 1) para poder
+        # multiplicar elemento a elemento contra matrix (N, 1536)
+        weighted_matrix = matrix * weight_vec[:, np.newaxis]   # (N, 1536)
+        result_vector = weighted_matrix.sum(axis=0)            # (1536,)
+
+        # ── Paso 4: normalización L2 ──────────────────────────────────────────
+        norm = float(np.linalg.norm(result_vector))
+
+        if norm > 1e-9:  # umbral para evitar división por cero con floats
+            result_vector = result_vector / norm
+            logger.info(
+                "TasteVectorService: Vector normalizado. Norma original=%.4f, likes=%d, dislikes=%d",
+                norm, likes_count, dislikes_count,
+            )
+        else:
+            logger.warning(
+                "TasteVectorService: Vector resultante es cero para usuario %s. "
+                "Posibles causas: todas las reacciones son SKIP, o likes y dislikes "
+                "se cancelan perfectamente. Devolviendo vector cero.",
+                request.user_id,
+            )
+
+        return ComputeTasteVectorResponse(
+            user_id=request.user_id,
+            taste_vector=result_vector.tolist(),
+            cards_used=len(request.selections),
+            likes_count=likes_count,
+            dislikes_count=dislikes_count,
+        )
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/services/__init__.py
+
+"""services"""
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/scripts/seed_embeddings.py
+
+"""
+scripts/seed_embeddings.py
+───────────────────────────
+Script one-shot que:
+  1. Lee las 12 style cards de tbl_style_cards (las que tienen embedding_vector = NULL)
+  2. Llama al endpoint POST /ai/onboarding/generate-embeddings
+  3. Persiste los vectores resultantes en tbl_style_cards.embedding_vector
+
+Se ejecuta UNA SOLA VEZ después del primer arranque del sistema,
+o cada vez que se agreguen style cards nuevas.
+
+Uso:
+    # Desde la raíz de dressme-ai, con el servicio corriendo:
+    python scripts/seed_embeddings.py
+
+Variables de entorno requeridas (mismas que el servicio):
+    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
+    AI_SERVICE_URL  →  URL interna de dressme-ai (default: http://localhost:8000)
+"""
+
+import os
+import sys
+import logging
+import requests
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+# ── Configuración ─────────────────────────────────────────────────────────────
+
+DB_CONFIG = {
+    "host":     os.environ["DB_HOST"],
+    "port":     int(os.environ.get("DB_PORT", 5432)),
+    "dbname":   os.environ["DB_NAME"],
+    "user":     os.environ["DB_USER"],
+    "password": os.environ["DB_PASS"],
+}
+
+AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://localhost:8000")
+GENERATE_ENDPOINT = f"{AI_SERVICE_URL}/ai/onboarding/generate-embeddings"
+
+
+# ── Paso 1: leer tarjetas sin embedding ───────────────────────────────────────
+
+def fetch_cards_without_embeddings(conn) -> list[dict]:
+    """
+    Consulta las style cards que aún no tienen embedding generado.
+    Idempotente: si todas ya tienen embedding, devuelve lista vacía
+    y el script termina sin hacer ninguna llamada a OpenAI.
+    """
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("""
+            SELECT id::text, semantic_description
+            FROM tbl_style_cards
+            WHERE embedding_vector IS NULL
+              AND is_active = true
+            ORDER BY display_order ASC
+        """)
+        rows = cur.fetchall()
+    return [dict(row) for row in rows]
+
+
+# ── Paso 2: llamar al servicio AI ─────────────────────────────────────────────
+
+def call_generate_embeddings(cards: list[dict]) -> list[dict]:
+    """
+    Llama a POST /ai/onboarding/generate-embeddings con todas las tarjetas.
+    Devuelve la lista de {id, embedding_vector} lista para persistir.
+    """
+    payload = {
+        "style_cards": [
+            {
+                "id": card["id"],
+                "semantic_description": card["semantic_description"],
+            }
+            for card in cards
+        ]
+    }
+
+    logger.info("Llamando a %s con %d tarjetas...", GENERATE_ENDPOINT, len(cards))
+
+    response = requests.post(
+        GENERATE_ENDPOINT,
+        json=payload,
+        timeout=60,  # OpenAI puede tardar hasta ~10s para batch de 12
+    )
+
+    if response.status_code != 200:
+        logger.error(
+            "El servicio AI respondió con %d: %s",
+            response.status_code,
+            response.text,
+        )
+        sys.exit(1)
+
+    data = response.json()
+    logger.info(
+        "Embeddings generados con modelo '%s' para %d tarjetas.",
+        data["model_used"],
+        data["total_processed"],
+    )
+    return data["embeddings"]
+
+
+# ── Paso 3: persistir en DB ───────────────────────────────────────────────────
+
+def persist_embeddings(conn, embeddings: list[dict]) -> None:
+    """
+    Actualiza tbl_style_cards con los vectores generados.
+
+    psycopg2 no tiene soporte nativo para el tipo vector de pgvector,
+    así que serializamos el array como string '[f1, f2, ...]' que
+    PostgreSQL acepta y convierte automáticamente al tipo vector.
+    """
+    with conn.cursor() as cur:
+        for item in embeddings:
+            # Serializar el array de floats al formato que acepta pgvector
+            vector_str = "[" + ",".join(str(f) for f in item["embedding_vector"]) + "]"
+
+            cur.execute(
+                """
+                UPDATE tbl_style_cards
+                SET embedding_vector = %s::vector
+                WHERE id = %s::uuid
+                """,
+                (vector_str, item["id"]),
+            )
+            logger.info("  ✓ Embedding persistido para tarjeta %s", item["id"])
+
+    conn.commit()
+    logger.info("Commit realizado. %d embeddings guardados en DB.", len(embeddings))
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main():
+    logger.info("═══════════════════════════════════════════════")
+    logger.info("  seed_embeddings.py — Iniciando")
+    logger.info("═══════════════════════════════════════════════")
+
+    # Conectar a PostgreSQL
+    logger.info("Conectando a PostgreSQL en %s:%s/%s...",
+                DB_CONFIG["host"], DB_CONFIG["port"], DB_CONFIG["dbname"])
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+    except Exception as e:
+        logger.error("No se pudo conectar a la base de datos: %s", e)
+        sys.exit(1)
+
+    try:
+        # Paso 1: ¿hay tarjetas sin embedding?
+        cards = fetch_cards_without_embeddings(conn)
+
+        if not cards:
+            logger.info("Todas las style cards ya tienen embedding. Nada que hacer.")
+            return
+
+        logger.info("Encontradas %d tarjetas sin embedding.", len(cards))
+
+        # Paso 2: generar embeddings vía servicio AI
+        embeddings = call_generate_embeddings(cards)
+
+        # Paso 3: persistir en DB
+        persist_embeddings(conn, embeddings)
+
+        logger.info("═══════════════════════════════════════════════")
+        logger.info("  seed_embeddings.py — Completado exitosamente")
+        logger.info("═══════════════════════════════════════════════")
+
+    except Exception as e:
+        conn.rollback()
+        logger.exception("Error inesperado durante el seed de embeddings: %s", e)
+        sys.exit(1)
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
+    main()
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/settings/dependencies.py
+
+"""
+dependencies.py
+───────────────
+Inyección de dependencias para FastAPI.
+define cómo se construyen los objetos que los routers necesitan.
+
+FastAPI usa el patrón Depends() para inyección. Cuando un endpoint
+declara `service: TasteVectorService = Depends(get_taste_vector_service)`,
+FastAPI llama a get_taste_vector_service() y pasa el resultado al endpoint.
+
+La instancia del cliente OpenAI se crea una sola vez al arrancar
+(patrón singleton implícito con lru_cache) para no abrir una nueva
+conexión HTTP en cada request.
+"""
+
+from functools import lru_cache
+from openai import OpenAI
+from settings.config import get_settings
+from services.taste_vector_service import TasteVectorService
+from services.embedding_service import EmbeddingService
+
+
+@lru_cache(maxsize=1)
+def get_openai_client() -> OpenAI:
+    """
+    Crea el cliente de OpenAI una sola vez durante la vida del proceso.
+    lru_cache(maxsize=1) garantiza que siempre se devuelve la misma instancia.
+
+    El cliente lee OPENAI_API_KEY automáticamente desde la variable de entorno,
+    no hay que pasársela explícitamente. Si la variable no existe, OpenAI
+    lanzará AuthenticationError en la primera llamada a la API.
+    """
+    settings = get_settings()
+    return OpenAI(api_key=settings.openai_api_key)
+
+
+def get_taste_vector_service() -> TasteVectorService:
+    """
+    TasteVectorService no depende de OpenAI (solo usa numpy),
+    así que no necesita el cliente. Se puede instanciar limpiamente.
+    """
+    return TasteVectorService()
+
+
+def get_embedding_service() -> EmbeddingService:
+    """
+    EmbeddingService sí necesita el cliente de OpenAI.
+    Se construye pasándole el singleton del cliente.
+    """
+    client = get_openai_client()
+    return EmbeddingService(openai_client=client)
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/settings/config.py
+
+"""
+config.py
+──────────
+Gestión de configuración con pydantic-settings.
+
+Pydantic Settings lee las variables en este orden de prioridad:
+  1. Variables de entorno del sistema (las del docker-compose o .env)
+  2. Archivo .env en el directorio raíz del proyecto
+  3. Valores por defecto definidos en la clase
+
+Si una variable marcada como requerida (sin default) no existe
+en ninguna fuente, el servidor lanza ValidationError al arrancar,
+con un mensaje claro de qué variable falta. Falla rápido y con claridad,
+"""
+
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    # ── OpenAI ────────────────────────────────────────────────────────────────
+    openai_api_key: str = "" # Requerida. Sin default — falla explícito si no existe.
+
+    # ── Servicio ──────────────────────────────────────────────────────────────
+    app_name: str = "dressme-ai"
+    app_env: str = "development"     # "development" | "production"
+    log_level: str = "INFO"
+
+    # ── Pydantic Settings config ───────────────────────────────────────────────
+    model_config = SettingsConfigDict(
+        env_file=".env",             # Lee el .env si existe (útil en local)
+        env_file_encoding="utf-8",
+        case_sensitive=False,        # OPENAI_API_KEY == openai_api_key
+        extra="ignore",              # Variables de entorno extra no causan error
+    )
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """
+    Singleton de configuración.
+    lru_cache garantiza que el .env solo se lee una vez al arrancar.
+    """
+    return Settings()
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/settings/__init__.py
+
+"""settings"""
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/__init__.py
+
+"""
+dressme-ai
+───────────
+Microservicio de inteligencia artificial de Dressme.
+
+Motor responsable de:
+- Generar embeddings de style cards
+- Calcular el taste vector del usuario
+"""
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/main.py
+
+"""
+main.py
+────────
+Punto de entrada de dressme-ai.
+
+Equivalente al DressmeAiApplication.java de Spring Boot.
+"""
+
+import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-app = FastAPI()
-
-@app.get("/")
-def read_root():
-    return {"service": "dressme-ai", "status": "active"}
+from settings.config import get_settings
+from infra.error_handler import register_error_handlers
+from routers import onboarding_router
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/requirements.txt
+# ── Configuración de logging ──────────────────────────────────────────────────
+
+def configure_logging(log_level: str) -> None:
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+settings = get_settings()
+configure_logging(settings.log_level)
+logger = logging.getLogger(__name__)
+
+
+# ── Lifespan ──────────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("══════════════════════════════════════════")
+    logger.info("  %s arrancando en modo: %s", settings.app_name, settings.app_env)
+    if settings.openai_api_key:
+        logger.info("  OpenAI API Key configurada: OK")
+    else:
+        logger.warning(
+            "  OpenAI API Key NO configurada — "
+            "los endpoints de embeddings fallarán si se invocan. "
+            "Agrega OPENAI_API_KEY al .env cuando estés listo."
+        )
+    logger.info("══════════════════════════════════════════")
+    yield
+    logger.info("%s apagándose correctamente.", settings.app_name)
+
+
+# ── Aplicación FastAPI ────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="Dressme AI Service",
+    description="""
+    Motor de inteligencia artificial de Dressme.
+
+    Responsabilidades en el MVP:
+    - **Generar embeddings** de style cards usando OpenAI text-embedding-3-small
+    - **Calcular el taste vector** del usuario a partir de sus selecciones de onboarding
+
+    Consumido exclusivamente por **dressme-back** en la red interna Docker.
+    No está expuesto públicamente a través del Gateway.
+    """,
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# ── Registro de error handlers ────────────────────────────────────────────────
+register_error_handlers(app)
+
+# ── Registro de routers ───────────────────────────────────────────────────────
+app.include_router(onboarding_router)
+
+
+# ── Health check ─────────────────────────────────────────────────────────────
+
+@app.get("/", tags=["Health"])
+def health_check():
+    return {
+        "service": settings.app_name,
+        "status": "active",
+        "env": settings.app_env,
+    }
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/infra/error_handler.py
+
+import logging
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from openai import APIError, RateLimitError, APIConnectionError
+
+logger = logging.getLogger(__name__)
+
+def _error_response(status_code: int, error: str, detail: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": error, "detail": detail},
+    )
+
+
+# ── Handlers ──────────────────────────────────────────────────────────────────
+
+async def handle_value_error(request: Request, exc: ValueError) -> JSONResponse:
+    """
+    Errores de validación de dominio.
+    Ej: embedding con dimensiones distintas a 1536.
+    → 422 Unprocessable Entity
+    """
+    logger.error("ValueError en %s: %s", request.url.path, exc)
+    return _error_response(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        error="VALIDATION_ERROR",
+        detail=str(exc),
+    )
+
+
+async def handle_rate_limit_error(request: Request, exc: RateLimitError) -> JSONResponse:
+    """
+    La API de OpenAI rechazó la solicitud por exceso de tasa.
+    → 429 Too Many Requests
+    """
+    logger.error("RateLimitError de OpenAI en %s", request.url.path)
+    return _error_response(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        error="OPENAI_RATE_LIMIT",
+        detail="Límite de tasa de OpenAI alcanzado. Reintenta en unos segundos.",
+    )
+
+
+async def handle_api_connection_error(request: Request, exc: APIConnectionError) -> JSONResponse:
+    """
+    No se pudo establecer conexión con la API de OpenAI.
+    Puede ser un problema de red o que OpenAI esté caído.
+    → 503 Service Unavailable
+    """
+    logger.error("APIConnectionError de OpenAI en %s", request.url.path)
+    return _error_response(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        error="OPENAI_UNAVAILABLE",
+        detail="No se pudo conectar con OpenAI. Verifica la conectividad.",
+    )
+
+
+async def handle_openai_api_error(request: Request, exc: APIError) -> JSONResponse:
+    """
+    Error genérico de la API de OpenAI (autenticación, modelo no encontrado, etc.).
+    RateLimitError y APIConnectionError son subclases de APIError, pero sus handlers
+    están registrados primero, así que este solo captura los casos restantes.
+    → 502 Bad Gateway
+    """
+    logger.error("APIError de OpenAI en %s: %s", request.url.path, exc.message)
+    return _error_response(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        error="OPENAI_API_ERROR",
+        detail=f"Error en la API de OpenAI: {exc.message}",
+    )
+
+
+async def handle_unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Última línea de defensa: cualquier excepción no capturada por los handlers
+    anteriores llega aquí. Equivalente al catch(Exception e) genérico.
+    → 500 Internal Server Error
+
+    Se usa logger.exception() para incluir el stack trace completo en los logs,
+    imprescindible para debuggear errores inesperados en producción.
+    """
+    logger.exception("Excepción no controlada en %s", request.url.path)
+    return _error_response(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        error="INTERNAL_ERROR",
+        detail="Error interno del servidor.",
+    )
+
+
+# ── Registro ──────────────────────────────────────────────────────────────────
+
+def register_error_handlers(app: FastAPI) -> None:
+    """
+    Registra todos los handlers en la aplicación FastAPI.
+
+    El orden importa: FastAPI evalúa los handlers de más específico
+    a más general. RateLimitError y APIConnectionError deben registrarse
+    ANTES que APIError (su clase padre), o nunca se alcanzarían.
+    """
+    app.add_exception_handler(RateLimitError, handle_rate_limit_error)
+    app.add_exception_handler(APIConnectionError, handle_api_connection_error)
+    app.add_exception_handler(APIError, handle_openai_api_error)
+    app.add_exception_handler(ValueError, handle_value_error)
+    app.add_exception_handler(Exception, handle_unhandled_exception)
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/infra/__init__.py
+
+"""
+infra
+──────
+Módulo de infraestructura.
+
+Contiene utilidades de bajo nivel como handlers de errores, middleware, etc.
+"""
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/routers/onboarding_router.py
+
+"""
+onboarding_router.py
+─────────────────────
+Router para el flujo de onboarding.
+
+Expone endpoints para:
+- Procesar las selecciones de estilo del usuario
+- Generar y calcular el taste vector
+"""
+
+from fastapi import APIRouter, HTTPException
+from pydantic import ValidationError
+
+from schemas.onboarding import ComputeTasteVectorRequest, ComputeTasteVectorResponse
+from services.taste_vector_service import TasteVectorService
+
+router = APIRouter(
+    prefix="/api/v1/onboarding",
+    tags=["Onboarding"],
+)
+
+taste_vector_service = TasteVectorService()
+
+
+@router.post("/compute-taste-vector", response_model=ComputeTasteVectorResponse)
+def compute_taste_vector(request: ComputeTasteVectorRequest) -> ComputeTasteVectorResponse:
+    """
+    Calcula el taste vector del usuario basado en sus selecciones de onboarding.
+
+    **Request:**
+    - `user_id`: ID del usuario
+    - `selections`: Lista de tarjetas con embedding y reacción (LIKE/DISLIKE/SKIP)
+
+    **Response:**
+    - `user_id`: ID del usuario
+    - `taste_vector`: Vector de 1536 dimensiones (embedding del taste)
+    - `cards_used`: Cantidad de tarjetas procesadas
+    - `likes_count`: Cantidad de selecciones LIKE
+    - `dislikes_count`: Cantidad de selecciones DISLIKE
+    """
+    try:
+        taste_vector_result = taste_vector_service.compute(request)
+        return taste_vector_result
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=f"Validación fallida: {str(e)}")
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al calcular taste vector: {str(e)}",
+        )
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/routers/onboarding.py
+
+import logging
+from fastapi import APIRouter, Depends, status
+
+from schemas.onboarding import (
+    ComputeTasteVectorRequest,
+    ComputeTasteVectorResponse,
+    GenerateEmbeddingsRequest,
+    GenerateEmbeddingsResponse,
+)
+from services.taste_vector_service import TasteVectorService
+from services.embedding_service import EmbeddingService
+from settings.dependencies import get_taste_vector_service, get_embedding_service
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/ai/onboarding",
+    tags=["Onboarding AI"],
+)
+
+
+# ── Endpoint 1: Compute Taste Vector ─────────────────────────────────────────
+
+@router.post(
+    "/compute-taste-vector",
+    response_model=ComputeTasteVectorResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Calcular taste vector del usuario",
+    description="""
+    Recibe las selecciones de onboarding del usuario (embeddings + reacciones)
+    y devuelve el taste vector normalizado de 1536 dimensiones.
+
+    Este endpoint es consumido exclusivamente por **dressme-back** durante el
+    flujo `POST /api/v1/onboarding/calibrate`. El vector resultante es persistido
+    por dressme-back vía PATCH a dressme-database.
+
+    **Pesos aplicados por reacción:**
+    - `LIKE` → +1.0
+    - `DISLIKE` → -0.3
+    - `SKIP` → 0.0 (no aporta información)
+    """,
+)
+def compute_taste_vector(
+    request: ComputeTasteVectorRequest,
+    service: TasteVectorService = Depends(get_taste_vector_service),
+) -> ComputeTasteVectorResponse:
+    logger.info(
+        "Router: POST /compute-taste-vector — usuario=%s, selecciones=%d",
+        request.user_id,
+        len(request.selections),
+    )
+    result = service.compute(request)
+    logger.info("Router: Vector calculado exitosamente para usuario=%s", request.user_id)
+    return result
+
+
+# ── Endpoint 2: Generate Style Card Embeddings ───────────────────────────────
+
+@router.post(
+    "/generate-embeddings",
+    response_model=GenerateEmbeddingsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generar embeddings para style cards",
+    description="""
+    Recibe las descripciones semánticas de las style cards y genera sus embeddings
+    usando OpenAI `text-embedding-3-small`.
+
+    **Este endpoint se usa una sola vez** (o cuando se agregan tarjetas nuevas).
+    Los embeddings generados deben persistirse en `tbl_style_cards.embedding_vector`
+    para que el endpoint `compute-taste-vector` los reciba ya precalculados.
+
+    Consumido por el script `scripts/seed_embeddings.py` de inicialización.
+    """,
+)
+def generate_embeddings(
+    request: GenerateEmbeddingsRequest,
+    service: EmbeddingService = Depends(get_embedding_service),
+) -> GenerateEmbeddingsResponse:
+    logger.info(
+        "Router: POST /generate-embeddings — %d tarjetas a procesar",
+        len(request.style_cards),
+    )
+    result = service.generate_for_style_cards(request)
+    logger.info(
+        "Router: %d embeddings generados con modelo %s",
+        result.total_processed,
+        result.model_used,
+    )
+    return result
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/routers/__init__.py
+
+"""
+routers
+────────
+Módulo que agrupa todos los routers de la aplicación FastAPI.
+"""
+
+from routers.onboarding_router import router as onboarding_router
+
+__all__ = ["onboarding_router"]
+
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/requirements.txt
 
 fastapi==0.109.2
 uvicorn==0.27.1
 openai==1.12.0
 numpy==1.26.4
 python-dotenv==1.0.1
+pydantic-settings>=2.0.0
+requests>=2.31.0
+psycopg2-binary>=2.9.0
+
+
+Archivo: /home/julio/Desktop/dress-me-application/dressme-app/dressme-ai/Dockerfile
+
+# ─── Etapa única: imagen de producción ───────────────────────────────────────
+#
+# Usamos python:3.11-slim porque:
+#   - slim elimina herramientas de compilación innecesarias (~200MB menos)
+#   - 3.11 es la versión mínima requerida por pydantic-settings 2.x y
+#     la sintaxis list[float] en type hints que usamos en los schemas
+#
+FROM python:3.11-slim
+
+# ── Variables de construcción ─────────────────────────────────────────────────
+# PYTHONDONTWRITEBYTECODE: evita crear archivos .pyc innecesarios en el contenedor
+# PYTHONUNBUFFERED:        fuerza que los logs de Python salgan en tiempo real
+#                          en lugar de quedar en buffer — imprescindible para
+#                          ver los logs de Uvicorn en docker compose logs
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app  
+
+# ── Directorio de trabajo ─────────────────────────────────────────────────────
+WORKDIR /app
+
+# ── Dependencias del sistema ──────────────────────────────────────────────────
+# libpq-dev: requerida por psycopg2 para conectarse a PostgreSQL
+# gcc:       compilador necesario para algunas dependencias de numpy en slim
+# Las eliminamos después de instalar las dependencias Python para reducir
+# el tamaño final de la imagen (patrón common en imágenes de producción)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libpq-dev \
+        gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Dependencias Python ───────────────────────────────────────────────────────
+# Copiamos requirements.txt ANTES que el resto del código.
+# Docker cachea las capas en orden: si el código cambia pero requirements.txt
+# no cambia, Docker reutiliza la capa de pip install sin reinstalar todo.
+# Esto hace los rebuilds durante desarrollo mucho más rápidos.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ── Código fuente ─────────────────────────────────────────────────────────────
+COPY . .
+
+# ── Puerto expuesto ───────────────────────────────────────────────────────────
+# Documenta que el contenedor escucha en 8000.
+# El docker-compose.yml mapea este puerto al 8083 del host.
+EXPOSE 8000
+
+# ── Comando de arranque ───────────────────────────────────────────────────────
+# --host 0.0.0.0: escucha en todas las interfaces de red del contenedor,
+#                 no solo en localhost. Sin esto, el servicio no es accesible
+#                 desde otros contenedores en la red de Docker.
+# --port 8000:    explícito para que coincida con el EXPOSE y el compose.
+# Sin --reload:   el reload automático es solo para desarrollo local.
+#                 En Docker el contenedor entero se reconstruye cuando hay cambios.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
