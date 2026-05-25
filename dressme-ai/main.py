@@ -1,11 +1,3 @@
-"""
-main.py
-────────
-Punto de entrada de dressme-ai.
-
-Equivalente al DressmeAiApplication.java de Spring Boot.
-"""
-
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -35,13 +27,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("══════════════════════════════════════════")
     logger.info("  %s arrancando en modo: %s", settings.app_name, settings.app_env)
-    if settings.openai_api_key:
-        logger.info("  OpenAI API Key configurada: OK")
+    if settings.gemini_api_key:
+        logger.info("  Gemini API Key configurada: OK")
     else:
         logger.warning(
-            "  OpenAI API Key NO configurada — "
+            "  Gemini API Key NO configurada — "
             "los endpoints de embeddings fallarán si se invocan. "
-            "Agrega OPENAI_API_KEY al .env cuando estés listo."
+            "Agrega GEMINI_API_KEY al .env cuando estés listo."
         )
     logger.info("══════════════════════════════════════════")
     yield
@@ -56,7 +48,7 @@ app = FastAPI(
     Motor de inteligencia artificial de Dressme.
 
     Responsabilidades en el MVP:
-    - **Generar embeddings** de style cards usando OpenAI text-embedding-3-small
+    - **Generar embeddings** de style cards usando Google Gemini gemini-embedding-001
     - **Calcular el taste vector** del usuario a partir de sus selecciones de onboarding
 
     Consumido exclusivamente por **dressme-back** en la red interna Docker.
@@ -73,6 +65,8 @@ register_error_handlers(app)
 
 # ── Registro de routers ───────────────────────────────────────────────────────
 app.include_router(onboarding_router)
+
+logger.info("Routers registrados: /ai/onboarding/generate-embeddings, /ai/onboarding/compute-taste-vector")
 
 
 # ── Health check ─────────────────────────────────────────────────────────────

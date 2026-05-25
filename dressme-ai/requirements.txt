@@ -1,8 +1,18 @@
+# ── Web framework ─────────────────────────────────────────────────────────────
 fastapi==0.109.2
 uvicorn==0.27.1
-openai==1.12.0
+
+# ── Validación y configuración ─────────────────────────────────────────────────
+pydantic==2.6.1
+pydantic-settings==2.2.1     # Para leer variables de entorno con BaseSettings
+
+# ── IA y cálculo vectorial ─────────────────────────────────────────────────────
+google-generativeai==0.8.3   
 numpy==1.26.4
+
+# ── Utilidades ─────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
-pydantic-settings>=2.0.0
-requests>=2.31.0
-psycopg2-binary>=2.9.0
+
+# ── Conexión a DB (solo para el script seed_embeddings.py) ────────────────────
+psycopg2-binary==2.9.9       # binary = sin dependencias de compilación en Docker
+requests==2.31.0             # Para que el script llame al propio servicio AI
