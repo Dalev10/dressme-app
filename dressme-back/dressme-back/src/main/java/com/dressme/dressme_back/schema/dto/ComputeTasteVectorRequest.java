@@ -1,14 +1,15 @@
 package com.dressme.dressme_back.schema.dto;
- 
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.UUID;
- 
+
 public record ComputeTasteVectorRequest(
-    UUID userId,
+    @JsonProperty("user_id") UUID userId,
     List<EmbeddingItem> selections
 ) {
     public record EmbeddingItem(
-        UUID styleCardId,
+        @JsonProperty("style_card_id") UUID styleCardId,
         float[] embedding,
         String reaction   // "LIKE" | "DISLIKE" | "SKIP"
     ) {}

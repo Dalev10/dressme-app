@@ -76,7 +76,9 @@ public class OnboardingOrchestratorServiceImpl implements OnboardingOrchestrator
         // ── Paso 2: Cruzar embeddings con reacciones ──────────────────────────
         // Construimos un mapa id → embedding para hacer el join con las reacciones
         // en O(n) en lugar de O(n²).
+        // Filtramos embeddings null para evitar NullPointerException en toMap()
         Map<UUID, float[]> embeddingMap = embeddings.stream()
+                .filter(e -> e.embeddingVector() != null)
                 .collect(Collectors.toMap(
                         StyleCardEmbeddingResponse::id,
                         StyleCardEmbeddingResponse::embeddingVector
@@ -116,13 +118,23 @@ public class OnboardingOrchestratorServiceImpl implements OnboardingOrchestrator
                 aiResponse.likesCount(), aiResponse.dislikesCount());
 
         // ── Paso 4: Persistir el taste vector en dressme-database ─────────────
+        // Convertir List<Float> a float[] para UserUpdateRequest
+        float[] tasteVectorArray = null;
+        if (aiResponse.tasteVector() != null && !aiResponse.tasteVector().isEmpty()) {
+            tasteVectorArray = new float[aiResponse.tasteVector().size()];
+            for (int i = 0; i < aiResponse.tasteVector().size(); i++) {
+                Float val = aiResponse.tasteVector().get(i);
+                tasteVectorArray[i] = val != null ? val : 0.0f;
+            }
+        }
+
         // Reutilizamos UserUpdateRequest que ya existe en dressme-back.
         // sourceType se actualiza de "COLD_START" a "google_onboarding".
         UserUpdateRequest updateRequest = new UserUpdateRequest(
                 null,                    // displayName sin cambio
                 null,                    // profilePicture sin cambio
                 true,                    // isCalibrated = true
-                aiResponse.tasteVector(),
+                tasteVectorArray,        // taste vector convertido a float[]
                 "google_onboarding"      // sourceType actualizado
         );
 
@@ -167,7 +179,7 @@ public class OnboardingOrchestratorServiceImpl implements OnboardingOrchestrator
         return new OnboardingCalibrationResponse(
                 request.userId(),
                 true,
-                aiResponse.tasteVector().length,
+                aiResponse.tasteVector().size(),
                 aiResponse.likesCount(),
                 aiResponse.dislikesCount()
         );

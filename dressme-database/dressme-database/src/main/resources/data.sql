@@ -209,3 +209,12 @@ VALUES
 ('22222222-0000-0000-0000-000000000030', 'Pink', 350, 100, 88, false)
 
 ON CONFLICT DO NOTHING;
+
+-- =============================================================================
+-- SEED: tbl_providers
+-- OAuth providers soportados por la aplicación. Por ahora solo GOOGLE.
+-- =============================================================================
+
+INSERT INTO tbl_providers (id, name, auth_endpoint, icon_url, is_active)
+VALUES ('33333333-0000-0000-0000-000000000001', 'GOOGLE', 'https://accounts.google.com/o/oauth2/auth', 'https://www.gstatic.com/images/branding/product/1x/gboard_color_48dp.png', true)
+ON CONFLICT DO NOTHING;
