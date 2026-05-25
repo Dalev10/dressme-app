@@ -5,6 +5,7 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -75,4 +76,12 @@ public class StyleCard {
     @Builder.Default
     @Column(name = "is_active")
     private boolean isActive = true;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "tbl_style_card_mappings", // El nombre exacto de la tabla puente
+        joinColumns = @JoinColumn(name = "style_card_id"), // La FK hacia StyleCard
+        inverseJoinColumns = @JoinColumn(name = "style_id") // La FK hacia Style
+    )
+    private Set<Style> microStyles;
 }
