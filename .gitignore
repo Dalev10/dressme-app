@@ -1,6 +1,7 @@
 # Logs e IDEs
 .idea/
 .vscode/
+*.iml
 *.log
 
 # Entornos Virtuales de Python (para cuando hagamos el dressme-ai)
@@ -13,6 +14,8 @@ dist/
 
 # Java compilados
 target/
+build/
+out/
 *.class
 
 .env
