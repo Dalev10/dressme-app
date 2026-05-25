@@ -666,3 +666,76 @@ ON CONFLICT DO NOTHING;
 INSERT INTO tbl_providers (id, name, auth_endpoint, icon_url, is_active)
 VALUES ('33333333-0000-0000-0000-000000000001', 'GOOGLE', 'https://accounts.google.com/o/oauth2/auth', 'https://www.gstatic.com/images/branding/product/1x/gboard_color_48dp.png', true)
 ON CONFLICT DO NOTHING;
+
+-- =====================================================================
+-- LLENADO DE MICRO-ESTILOS (tbl_styles)
+-- =====================================================================
+INSERT INTO tbl_styles (id, name, description) VALUES
+                                                 ('66666666-0000-0000-0000-000000000001', 'Pure Minimalist', 'Extreme simplicity, solid neutral colors, zero logos.'),
+                                                 ('66666666-0000-0000-0000-000000000002', 'Quiet Luxury', 'High-end fabrics, tailored but understated aesthetics.'),
+                                                 ('66666666-0000-0000-0000-000000000003', 'Normcore', 'Deliberately casual, average, everyday clothing choices.'),
+                                                 ('66666666-0000-0000-0000-000000000004', 'Skater', 'Loose fits, skate brand hoodies, durable canvas shoes.'),
+                                                 ('66666666-0000-0000-0000-000000000005', 'Techwear', 'Functional garments with utility straps, pockets, and synthetic fabrics.'),
+                                                 ('66666666-0000-0000-0000-000000000006', 'Hypebeast', 'Focus on limited-edition streetwear drops, loud logos, and trend-chasing.'),
+                                                 ('66666666-0000-0000-0000-000000000007', 'Corporate Formal', 'Strict traditional tailoring, complete suits, and ties.'),
+                                                 ('66666666-0000-0000-0000-000000000008', 'Old Money', 'Classic elegance inspired by historic wealthy families; polos, oxfords, blazers.'),
+                                                 ('66666666-0000-0000-0000-000000000009', 'Boho-Chic', 'Artistic prints, flowy maxi silhouettes, suede elements.'),
+                                                 ('66666666-0000-0000-0000-000000000010', 'Festival Folk', 'Fringe jackets, crochet tops, and western-influenced indie accessories.'),
+                                                 ('66666666-0000-0000-0000-000000000011', 'Gym Athletic', 'Performance activewear, compression gear, and seamless knit wear.'),
+                                                 ('66666666-0000-0000-0000-000000000012', 'Gothic Scholarly', 'Dark academic looks heavily featuring wool, tweed, and dark color palettes.'),
+                                                 ('66666666-0000-0000-0000-000000000013', 'Preppy Classic', 'Ivy League student aesthetics; argyle vests, pleated skirts, loafers.'),
+                                                 ('66666666-0000-0000-0000-000000000014', 'Y2K Pop', 'Bright candy colors, low-rise pants, and glossy synthetic fabrics.'),
+                                                 ('66666666-0000-0000-0000-000000000015', '90s Grunge', 'Oversized flannel shirts, distressed denim, and heavy combat boots.'),
+                                                 ('66666666-0000-0000-0000-000000000016', 'Prairie Romantic', 'Puffed sleeves, cottage floral prints, and linen lace trim.'),
+                                                 ('66666666-0000-0000-0000-000000000017', 'Smart Corporate', 'Hybrid professional clothes; chinos paired with unstructured blazers.'),
+                                                 ('66666666-0000-0000-0000-000000000018', 'Linen Breeze', 'Breathable linen clothes, nautical stripes, relaxed maritime resort wear.'),
+                                                 ('66666666-0000-0000-0000-000000000019', 'Punk Rock', 'Studded leather jackets, band tees, safety pins, and ripped black denim.'),
+                                                 ('66666666-0000-0000-0000-000000000020', 'Cyberpunk / Dark Avant-Garde', 'Futuristic, asymmetrical silhouettes, heavy use of black PVC or latex leather.'),
+                                                 ('66666666-0000-0000-0000-000000000021', 'Everyday Polished', 'The standard uniform: neat fitted jeans, clean crewnecks, leather sneakers.')
+  ON CONFLICT DO NOTHING;
+
+-- =====================================================================
+-- MAPEO MUCHOS A MUCHOS (tbl_style_card_mappings)
+-- Conecta los micro-estilos con tus 12 Style Cards Reales ('11111111-...')
+-- =====================================================================
+
+-- Card 1: Minimalist
+INSERT INTO tbl_style_card_mappings (style_card_id, style_id) VALUES
+                                                                ('11111111-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001'), -- Pure Minimalist
+                                                                ('11111111-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000002'), -- Quiet Luxury
+                                                                ('11111111-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000003'), -- Normcore
+-- Card 2: Streetwear
+                                                                ('11111111-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000004'), -- Skater
+                                                                ('11111111-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000005'), -- Techwear
+                                                                ('11111111-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000006'), -- Hypebeast
+-- Card 3: Classic & Formal
+                                                                ('11111111-0000-0000-0000-000000000003', '66666666-0000-0000-0000-000000000007'), -- Corporate Formal
+                                                                ('11111111-0000-0000-0000-000000000003', '66666666-0000-0000-0000-000000000008'), -- Old Money
+-- Card 4: Bohemian
+                                                                ('11111111-0000-0000-0000-000000000004', '66666666-0000-0000-0000-000000000009'), -- Boho-Chic
+                                                                ('11111111-0000-0000-0000-000000000004', '66666666-0000-0000-0000-000000000010'), -- Festival Folk
+                                                                ('11111111-0000-0000-0000-000000000004', '66666666-0000-0000-0000-000000000018'), -- Linen Breeze (¡Ves! Comparte micro-estilo con Coastal)
+-- Card 5: Athleisure
+                                                                ('11111111-0000-0000-0000-000000000005', '66666666-0000-0000-0000-000000000011'), -- Gym Athletic
+                                                                ('11111111-0000-0000-0000-000000000005', '66666666-0000-0000-0000-000000000003'), -- Normcore
+-- Card 6: Dark Academia
+                                                                ('11111111-0000-0000-0000-000000000006', '66666666-0000-0000-0000-000000000012'), -- Gothic Scholarly
+                                                                ('11111111-0000-0000-0000-000000000006', '66666666-0000-0000-0000-000000000013'), -- Preppy Classic
+-- Card 7: Y2K / Retro
+                                                                ('11111111-0000-0000-0000-000000000007', '66666666-0000-0000-0000-000000000014'), -- Y2K Pop
+                                                                ('11111111-0000-0000-0000-000000000007', '66666666-0000-0000-0000-000000000015'), -- 90s Grunge
+-- Card 8: Cottagecore
+                                                                ('11111111-0000-0000-0000-000000000008', '66666666-0000-0000-0000-000000000016'), -- Prairie Romantic
+-- Card 9: Business Casual
+                                                                ('11111111-0000-0000-0000-000000000009', '66666666-0000-0000-0000-000000000017'), -- Smart Corporate
+                                                                ('11111111-0000-0000-0000-000000000009', '66666666-0000-0000-0000-000000000008'), -- Old Money (Compartido con Formal)
+-- Card 10: Coastal / Nautical
+                                                                ('11111111-0000-0000-0000-000000000010', '66666666-0000-0000-0000-000000000018'), -- Linen Breeze
+                                                                ('11111111-0000-0000-0000-000000000010', '66666666-0000-0000-0000-000000000002'), -- Quiet Luxury (Compartido con Minimalist)
+-- Card 11: Edgy / Avant-Garde
+                                                                ('11111111-0000-0000-0000-000000000011', '66666666-0000-0000-0000-000000000019'), -- Punk Rock
+                                                                ('11111111-0000-0000-0000-000000000011', '66666666-0000-0000-0000-000000000020'), -- Cyberpunk / Dark Avant-Garde
+-- Card 12: Smart Casual
+                                                                ('11111111-0000-0000-0000-000000000012', '66666666-0000-0000-0000-000000000021')  -- Everyday Polished
+  ON CONFLICT DO NOTHING;
+
