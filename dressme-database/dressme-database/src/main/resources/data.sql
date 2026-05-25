@@ -667,6 +667,337 @@ INSERT INTO tbl_providers (id, name, auth_endpoint, icon_url, is_active)
 VALUES ('33333333-0000-0000-0000-000000000001', 'GOOGLE', 'https://accounts.google.com/o/oauth2/auth', 'https://www.gstatic.com/images/branding/product/1x/gboard_color_48dp.png', true)
 ON CONFLICT DO NOTHING;
 
+
+-- =============================================================================
+-- SEED: tbl_clothing_categories
+-- Jerarquía de dos niveles: categorías padre (parent_id = NULL) y
+-- subcategorías que referencian al padre por UUID fijo.
+--
+-- UUID especial: 55555555-0000-0000-0000-000000000001 → "Uncategorized"
+-- Se usa como valor por defecto en tbl_clothes.category_id cuando
+-- Vision AI aún no ha procesado la prenda.
+-- =============================================================================
+ 
+INSERT INTO tbl_clothing_categories (id, name, description, is_active, parent_id)
+VALUES
+ 
+-- ── Categoría especial ────────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000001',
+ 'Uncategorized',
+ 'Default category assigned before Vision AI analysis completes. Will be updated to the correct category after image processing.',
+ true, NULL),
+ 
+-- ── Tops (padre) ──────────────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000010',
+ 'Tops',
+ 'Upper body garments of any kind.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000011',
+ 'T-Shirt',
+ 'Short-sleeve crew or V-neck casual tops.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+('55555555-0000-0000-0000-000000000012',
+ 'Shirt',
+ 'Button-down or button-up shirts, formal or casual.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+('55555555-0000-0000-0000-000000000013',
+ 'Blouse',
+ 'Lightweight feminine tops, often with decorative details.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+('55555555-0000-0000-0000-000000000014',
+ 'Sweater',
+ 'Knit tops including pullovers, turtlenecks, and cardigans.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+('55555555-0000-0000-0000-000000000015',
+ 'Hoodie',
+ 'Hooded sweatshirts, zip-up or pullover.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+('55555555-0000-0000-0000-000000000016',
+ 'Tank Top',
+ 'Sleeveless tops, casual or athletic.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+('55555555-0000-0000-0000-000000000017',
+ 'Crop Top',
+ 'Short midriff-baring tops.',
+ true, '55555555-0000-0000-0000-000000000010'),
+ 
+-- ── Bottoms (padre) ───────────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000020',
+ 'Bottoms',
+ 'Lower body garments of any kind.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000021',
+ 'Jeans',
+ 'Denim trousers in any cut: slim, wide-leg, straight, skinny.',
+ true, '55555555-0000-0000-0000-000000000020'),
+ 
+('55555555-0000-0000-0000-000000000022',
+ 'Trousers',
+ 'Formal or semi-formal long pants, non-denim.',
+ true, '55555555-0000-0000-0000-000000000020'),
+ 
+('55555555-0000-0000-0000-000000000023',
+ 'Shorts',
+ 'Short-length bottoms for casual or athletic use.',
+ true, '55555555-0000-0000-0000-000000000020'),
+ 
+('55555555-0000-0000-0000-000000000024',
+ 'Skirt',
+ 'Skirts of any length: mini, midi, maxi.',
+ true, '55555555-0000-0000-0000-000000000020'),
+ 
+('55555555-0000-0000-0000-000000000025',
+ 'Leggings',
+ 'Fitted stretch pants for casual or athletic wear.',
+ true, '55555555-0000-0000-0000-000000000020'),
+ 
+('55555555-0000-0000-0000-000000000026',
+ 'Joggers',
+ 'Casual tapered sweatpants with elastic cuffs.',
+ true, '55555555-0000-0000-0000-000000000020'),
+ 
+-- ── Outerwear (padre) ─────────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000030',
+ 'Outerwear',
+ 'Outer layers worn over other clothing.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000031',
+ 'Jacket',
+ 'Lightweight outer layers: bomber, denim, leather, windbreaker.',
+ true, '55555555-0000-0000-0000-000000000030'),
+ 
+('55555555-0000-0000-0000-000000000032',
+ 'Coat',
+ 'Heavy outer garments for cold weather: trench, wool, puffer.',
+ true, '55555555-0000-0000-0000-000000000030'),
+ 
+('55555555-0000-0000-0000-000000000033',
+ 'Blazer',
+ 'Structured tailored jackets, formal or smart-casual.',
+ true, '55555555-0000-0000-0000-000000000030'),
+ 
+('55555555-0000-0000-0000-000000000034',
+ 'Vest',
+ 'Sleeveless outer layers including puffer vests and suit vests.',
+ true, '55555555-0000-0000-0000-000000000030'),
+ 
+-- ── Dresses & Jumpsuits (padre) ───────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000040',
+ 'Dresses & Jumpsuits',
+ 'One-piece full-body garments.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000041',
+ 'Dress',
+ 'One-piece garments covering the upper and lower body.',
+ true, '55555555-0000-0000-0000-000000000040'),
+ 
+('55555555-0000-0000-0000-000000000042',
+ 'Jumpsuit',
+ 'One-piece garments with legs, casual or formal.',
+ true, '55555555-0000-0000-0000-000000000040'),
+ 
+('55555555-0000-0000-0000-000000000043',
+ 'Romper',
+ 'Short-legged one-piece casual garments.',
+ true, '55555555-0000-0000-0000-000000000040'),
+ 
+-- ── Footwear (padre) ──────────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000050',
+ 'Footwear',
+ 'Shoes, boots, and sandals of all kinds.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000051',
+ 'Sneakers',
+ 'Athletic or casual lace-up shoes.',
+ true, '55555555-0000-0000-0000-000000000050'),
+ 
+('55555555-0000-0000-0000-000000000052',
+ 'Boots',
+ 'Ankle, knee-high, or over-the-knee boots.',
+ true, '55555555-0000-0000-0000-000000000050'),
+ 
+('55555555-0000-0000-0000-000000000053',
+ 'Loafers & Oxfords',
+ 'Formal or smart-casual slip-on or lace-up shoes.',
+ true, '55555555-0000-0000-0000-000000000050'),
+ 
+('55555555-0000-0000-0000-000000000054',
+ 'Sandals',
+ 'Open-toe warm-weather footwear.',
+ true, '55555555-0000-0000-0000-000000000050'),
+ 
+('55555555-0000-0000-0000-000000000055',
+ 'Heels',
+ 'Elevated footwear including pumps, stilettos, and block heels.',
+ true, '55555555-0000-0000-0000-000000000050'),
+ 
+-- ── Accessories (padre) ───────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000060',
+ 'Accessories',
+ 'Non-clothing items that complement an outfit.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000061',
+ 'Bag',
+ 'Handbags, backpacks, tote bags, crossbody bags.',
+ true, '55555555-0000-0000-0000-000000000060'),
+ 
+('55555555-0000-0000-0000-000000000062',
+ 'Hat',
+ 'Caps, beanies, wide-brim hats, and berets.',
+ true, '55555555-0000-0000-0000-000000000060'),
+ 
+('55555555-0000-0000-0000-000000000063',
+ 'Scarf & Belt',
+ 'Neck scarves, waist belts, and similar accessories.',
+ true, '55555555-0000-0000-0000-000000000060'),
+ 
+('55555555-0000-0000-0000-000000000064',
+ 'Jewellery',
+ 'Necklaces, earrings, rings, bracelets, and watches.',
+ true, '55555555-0000-0000-0000-000000000060'),
+ 
+-- ── Activewear (padre) ────────────────────────────────────────────────────────
+('55555555-0000-0000-0000-000000000070',
+ 'Activewear',
+ 'Performance and sports-specific garments.',
+ true, NULL),
+ 
+('55555555-0000-0000-0000-000000000071',
+ 'Sports Bra',
+ 'Athletic bras for exercise and physical activity.',
+ true, '55555555-0000-0000-0000-000000000070'),
+ 
+('55555555-0000-0000-0000-000000000072',
+ 'Athletic Shorts',
+ 'Performance shorts for running, training, or sports.',
+ true, '55555555-0000-0000-0000-000000000070'),
+ 
+('55555555-0000-0000-0000-000000000073',
+ 'Track Jacket',
+ 'Lightweight zip-up jackets for athletic or casual use.',
+ true, '55555555-0000-0000-0000-000000000070')
+ 
+ON CONFLICT DO NOTHING;
+ 
+ 
+-- =============================================================================
+-- SEED: tbl_occasions
+-- Contextos de uso donde se llevaría una prenda o un outfit.
+-- =============================================================================
+ 
+INSERT INTO tbl_occasions (id, name, description, is_active)
+VALUES
+ 
+('44444444-0000-0000-0000-000000000001',
+ 'Everyday',
+ 'Regular day-to-day wear for casual errands, coffee runs, or relaxing.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000002',
+ 'Work',
+ 'Office or professional environments requiring a polished look.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000003',
+ 'Party',
+ 'Social gatherings, birthday parties, and celebratory events.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000004',
+ 'Sport',
+ 'Physical activity, gym sessions, outdoor workouts, or sports.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000005',
+ 'Formal Event',
+ 'Black-tie, galas, weddings, and high-end ceremonies.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000006',
+ 'Outdoor',
+ 'Hiking, camping, picnics, and nature activities.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000007',
+ 'Date Night',
+ 'Romantic dinners, evening outings, and intimate gatherings.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000008',
+ 'Travel',
+ 'Comfortable yet stylish clothing for transit and exploring new cities.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000009',
+ 'Beach & Pool',
+ 'Swimwear and cover-ups for water and sun environments.',
+ true),
+ 
+('44444444-0000-0000-0000-000000000010',
+ 'Festival',
+ 'Music festivals, outdoor cultural events, and street fairs.',
+ true)
+ 
+ON CONFLICT DO NOTHING;
+ 
+ 
+-- =============================================================================
+-- SEED: tbl_weather
+-- Condiciones climáticas para contextualizar recomendaciones de outfits.
+-- =============================================================================
+ 
+INSERT INTO tbl_weather (id, name, description, is_active)
+VALUES
+ 
+('77777777-0000-0000-0000-000000000001',
+ 'Hot',
+ 'High temperatures above 28°C. Lightweight, breathable fabrics are key.',
+ true),
+ 
+('77777777-0000-0000-0000-000000000002',
+ 'Warm',
+ 'Comfortable temperatures between 20–28°C. Light layers work well.',
+ true),
+ 
+('77777777-0000-0000-0000-000000000003',
+ 'Mild',
+ 'Moderate temperatures between 12–20°C. Light jacket or long sleeves advised.',
+ true),
+ 
+('77777777-0000-0000-0000-000000000004',
+ 'Cold',
+ 'Cold temperatures below 12°C. Warm layers, coats, and knitwear essential.',
+ true),
+ 
+('77777777-0000-0000-0000-000000000005',
+ 'Rainy',
+ 'Wet conditions. Water-resistant or waterproof outerwear recommended.',
+ true),
+ 
+('77777777-0000-0000-0000-000000000006',
+ 'Freezing',
+ 'Very cold temperatures below 0°C. Heavy winter gear required.',
+ true),
+ 
+('77777777-0000-0000-0000-000000000007',
+ 'Windy',
+ 'Strong winds requiring windbreakers or structured outerwear.',
+ true)
+ 
+ON CONFLICT DO NOTHING;
+
 -- =====================================================================
 -- LLENADO DE MICRO-ESTILOS (tbl_styles)
 -- =====================================================================
