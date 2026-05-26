@@ -4,6 +4,7 @@ import com.dressme.dressme_back.schema.dto.OnboardingCalibrationResponse;
 import com.dressme.dressme_back.schema.dto.OnboardingSelectionRequest;
 import com.dressme.dressme_back.schema.dto.StyleCardDTO;
 import com.dressme.dressme_back.service.OnboardingOrchestratorService;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +30,7 @@ public class InternalOnboardingController {
 
     @PostMapping("/calibrate")
     public OnboardingCalibrationResponse calibrate(
-        @AuthenticationPrincipal Jwt jwt,
+        @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody OnboardingSelectionRequest request
     ) {
         String secureUserId = jwt.getSubject();
