@@ -25,3 +25,12 @@ out/
 *.pid
 *.seed
 postgres-data/
+
+# Reglas de agentes de IA
+.cursorrules
+.clinerules
+.agents/
+../.cursorrules
+../.clinerules
+../.agents/
+

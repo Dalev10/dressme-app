@@ -5,12 +5,13 @@ import java.util.List;
 import java.util.UUID;
 
 public record ComputeTasteVectorRequest(
-    @JsonProperty("user_id") UUID userId,
-    List<EmbeddingItem> selections
+    @JsonProperty("user_id") String userId,
+    @JsonProperty("selections") List<EmbeddingItem> selections
 ) {
     public record EmbeddingItem(
         @JsonProperty("style_card_id") UUID styleCardId,
-        float[] embedding,
-        String reaction   // "LIKE" | "DISLIKE" | "SKIP"
-    ) {}
+        @JsonProperty("embedding") float[] embedding,
+        @JsonProperty("reaction") String reaction
+    ) {
+    }
 }

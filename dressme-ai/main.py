@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from settings.config import get_settings
 from infra.error_handler import register_error_handlers
-from routers import onboarding_router
+from routers.onboarding import router as onboarding_router
 
 
 # ── Configuración de logging ──────────────────────────────────────────────────
@@ -66,7 +66,7 @@ register_error_handlers(app)
 # ── Registro de routers ───────────────────────────────────────────────────────
 app.include_router(onboarding_router)
 
-logger.info("Routers registrados: /ai/onboarding/generate-embeddings, /ai/onboarding/compute-taste-vector")
+logger.info("Routers registrados: /internal/ai/onboarding/generate-embeddings, /internal/ai/onboarding/compute-taste-vector")
 
 
 # ── Health check ─────────────────────────────────────────────────────────────

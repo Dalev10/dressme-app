@@ -14,8 +14,8 @@ from settings.dependencies import get_taste_vector_service, get_embedding_servic
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/ai/onboarding",
-    tags=["Onboarding AI"],
+    prefix="/internal/ai/onboarding",
+    tags=["Onboarding AI (Internal)"],
 )
 
 

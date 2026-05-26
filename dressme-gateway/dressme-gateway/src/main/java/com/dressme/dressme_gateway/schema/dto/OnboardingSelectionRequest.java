@@ -7,9 +7,6 @@ import java.util.UUID;
  
 public record OnboardingSelectionRequest(
  
-    @NotNull(message = "El userId es obligatorio")
-    UUID userId,
- 
     @NotEmpty(message = "Debe incluir al menos una selección")
     List<SelectionItem> selections
  
