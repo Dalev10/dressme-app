@@ -1,6 +1,7 @@
 package com.dressme.dressme_database.facade.impl;
 
 import com.dressme.dressme_database.facade.ColorOrchestratorFacade;
+import com.dressme.dressme_database.schema.dto.ColorCompatibilityPairRequestDTO;
 import com.dressme.dressme_database.schema.dto.ColorResponseDTO;
 import com.dressme.dressme_database.schema.dto.CompatibilityResponseDTO;
 import com.dressme.dressme_database.service.ColorCompatibilityService;
@@ -9,7 +10,9 @@ import com.dressme.dressme_database.util.ColorTheoryUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +37,16 @@ public class ColorOrchestratorFacadeImpl implements ColorOrchestratorFacade {
             );
 
         return new CompatibilityResponseDTO(matchedColor1, matchedColor2, score);
+    }
+
+    @Override
+    public List<CompatibilityResponseDTO> checkCompatibilityBatch(List<ColorCompatibilityPairRequestDTO> items) {
+        return items.stream()
+            .map(item -> checkCompatibility(
+                item.hue1(), item.saturation1(), item.lightness1(),
+                item.hue2(), item.saturation2(), item.lightness2()
+            ))
+            .collect(Collectors.toList());
     }
 
     private Optional<Double> resolveNeutralScore(boolean color1Neutral, boolean color2Neutral) {
