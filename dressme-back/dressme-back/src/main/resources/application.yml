@@ -1,10 +1,20 @@
 server:
   port: 8080
- 
+
 spring:
   application:
     name: dressme-back
- 
+  cloud:
+    openfeign:
+      okhttp:
+        enabled: true
+  # ──  Añadimos el validador del Token JWT de Google ──────────────────────
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://accounts.google.com
+
 # ── URLs de microservicios internos ───────────────────────────────────────────
 # Leídas por OnboardingOrchestratorServiceImpl vía @Value.
 # Los valores coinciden con los nombres de contenedor del docker-compose.yml.
@@ -12,3 +22,6 @@ app:
   services:
     database-url: ${DATABASE_SERVICE_URL:http://dressme-database:8080}
     ai-url: ${AI_SERVICE_URL:http://dressme-ai:8000}
+logging:
+  level:
+    org.springframework.security: TRACE
