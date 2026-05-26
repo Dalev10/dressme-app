@@ -1,11 +1,9 @@
 package com.dressme.dressme_gateway.schema.dto;
- 
-import java.util.UUID;
- 
+
 public record OnboardingCalibrationResponse(
-    UUID userId,
-    boolean isCalibrated,
-    int tasteVectorDimensions,
+    String userId,
+    boolean calibrated,
+    int tasteVectorSize,
     int likesCount,
     int dislikesCount
 ) {}

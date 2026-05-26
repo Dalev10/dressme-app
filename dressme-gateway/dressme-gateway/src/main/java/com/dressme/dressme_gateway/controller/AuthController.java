@@ -36,6 +36,7 @@ public class AuthController {
 
         ResponseEntity<Object> backResponse = backClient.post()
                 .uri("/internal/orchestrate/login")
+                .header(org.springframework.http.HttpHeaders.AUTHORIZATION, "Bearer " + request.token())
                 .body(userInfo)
                 .retrieve()
                 .toEntity(Object.class);

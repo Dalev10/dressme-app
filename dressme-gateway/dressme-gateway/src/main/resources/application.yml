@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: dressme-gateway
+  main:
+    allow-bean-definition-overriding: true
 
 # ── URLs de microservicios internos ───────────────────────────────────────────
 app:
