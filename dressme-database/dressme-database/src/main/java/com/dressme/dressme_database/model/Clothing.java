@@ -6,6 +6,20 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Representa una prenda del guardarropa de un usuario.
+ *
+ * DISEÑO DELIBERADO: category_id es nullable.
+ * El flujo de wardrobe es asíncrono en dos pasos:
+ *   1. Se crea la prenda con imagen y is_processed=false (category puede ser null)
+ *   2. Vision + Gemini analizan la imagen y actualizan category + is_processed=true
+ *
+ * La categoría "Uncategorized" del seed (UUID fijo: 55555555-0000-0000-0000-000000000001)
+ * se usa como valor semántico cuando la IA aún no procesó la prenda,
+ * pero category_id = null es igualmente válido durante el período de análisis.
+ * Esto evita FK constraints que bloqueen el INSERT inicial.
+ */
+
 @Entity
 @Table(name = "tbl_clothes")
 @Getter
@@ -23,8 +37,14 @@ public class Clothing {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+        /**
+     * nullable = true: la categoría se asigna tras el análisis de Vision.
+     * Antes era nullable = false, lo que impedía el INSERT inicial de la prenda
+     * antes de que la IA terminara el análisis.
+     */
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id", nullable = false)
+    @JoinColumn(name = "category_id", nullable = true)
     private ClothingCategory category;
 
     @Column(name = "image_url", nullable = false, columnDefinition = "TEXT")
