@@ -42,8 +42,13 @@ DB_CONFIG = {
     "password": os.environ["DB_PASS"],
 }
 
-AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://localhost:8000")
-GENERATE_ENDPOINT = f"{AI_SERVICE_URL}/ai/onboarding/generate-embeddings"
+# ── Configuración de URLs limpias y dinámicas ──────────────────────────────────
+
+# Si no existe la variable de entorno, apunta al localhost interno del contenedor
+AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://127.0.0.1:8000")
+
+# Construimos la ruta utilizando el prefijo unificado /internal que creamos
+GENERATE_ENDPOINT = f"{AI_SERVICE_URL.rstrip('/')}/internal/ai/onboarding/generate-embeddings"
 
 
 # ── Paso 1: leer tarjetas sin embedding ───────────────────────────────────────
@@ -68,9 +73,11 @@ def fetch_cards_without_embeddings(conn) -> list[dict]:
 
 # ── Paso 2: llamar al servicio AI ─────────────────────────────────────────────
 
+# ── Paso 2: llamar al servicio AI ─────────────────────────────────────────────
+import time
 def call_generate_embeddings(cards: list[dict]) -> list[dict]:
     """
-    Llama a POST /ai/onboarding/generate-embeddings con todas las tarjetas.
+    Llama a POST /internal/ai/onboarding/generate-embeddings con tolerancia de arranque.
     Devuelve la lista de {id, embedding_vector} lista para persistir.
     """
     payload = {
@@ -85,27 +92,38 @@ def call_generate_embeddings(cards: list[dict]) -> list[dict]:
 
     logger.info("Llamando a %s con %d tarjetas...", GENERATE_ENDPOINT, len(cards))
 
-    response = requests.post(
-        GENERATE_ENDPOINT,
-        json=payload,
-        timeout=60,  # OpenAI puede tardar hasta ~10s para batch de 12
-    )
-
-    if response.status_code != 200:
-        logger.error(
-            "El servicio AI respondió con %d: %s",
-            response.status_code,
-            response.text,
-        )
-        sys.exit(1)
-
-    data = response.json()
-    logger.info(
-        "Embeddings generados con modelo '%s' para %d tarjetas.",
-        data["model_used"],
-        data["total_processed"],
-    )
-    return data["embeddings"]
+    # Reintentos dinámicos en lo que FastAPI termina de encender
+    for intento in range(5):
+        try:
+            response = requests.post(
+                GENERATE_ENDPOINT,
+                json=payload,
+                timeout=60,  # El modelo puede tardar unos segundos en procesar el batch
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.info(
+                    "Embeddings generados con modelo '%s' para %d tarjetas.",
+                    data["model_used"],
+                    data["total_processed"],
+                )
+                return data["embeddings"]
+            else:
+                logger.error(
+                    "El servicio AI respondió con %d: %s", 
+                    response.status_code, 
+                    response.text
+                )
+                sys.exit(1)
+                
+        except requests.exceptions.ConnectionError:
+            if intento < 4:
+                logger.warning("El servidor FastAPI aún está arrancando... Reintentando en 3 segundos...")
+                time.sleep(3)
+            else:
+                logger.error("No se pudo establecer conexión con FastAPI tras varios intentos.")
+                sys.exit(1)
 
 
 # ── Paso 3: persistir en DB ───────────────────────────────────────────────────
