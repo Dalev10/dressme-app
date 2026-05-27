@@ -1,9 +1,14 @@
 package com.dressme.dressme_back.client;
 
+import com.dressme.dressme_back.schema.dto.ColorCompatibilityBatchRequest;
 import com.dressme.dressme_back.schema.dto.DatabaseCompatibilityResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 @FeignClient(name = "dressme-database-color-client", url = "${app.services.database-url}")
 public interface DatabaseColorCompatibilityClient {
@@ -16,5 +21,10 @@ public interface DatabaseColorCompatibilityClient {
         @RequestParam("hue2") int hue2,
         @RequestParam("saturation2") int saturation2,
         @RequestParam("lightness2") int lightness2
+    );
+
+    @PostMapping("/internal/colors/compatibility/batch")
+    List<DatabaseCompatibilityResponse> checkCompatibilityBatch(
+        @RequestBody ColorCompatibilityBatchRequest request
     );
 }

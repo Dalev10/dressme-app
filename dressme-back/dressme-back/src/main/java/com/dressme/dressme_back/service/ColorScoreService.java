@@ -1,8 +1,11 @@
 package com.dressme.dressme_back.service;
 
 import com.dressme.dressme_back.client.DatabaseColorCompatibilityClient;
+import com.dressme.dressme_back.schema.dto.ColorCompatibilityBatchRequest;
+import com.dressme.dressme_back.schema.dto.ColorCompatibilityPairRequest;
 import com.dressme.dressme_back.schema.dto.ColorScoreRequest;
 import com.dressme.dressme_back.schema.dto.ColorScoreResponse;
+import com.dressme.dressme_back.schema.dto.DatabaseCompatibilityResponse;
 import com.dressme.dressme_back.schema.dto.Slot;
 import com.dressme.dressme_back.schema.dto.SlotColorInput;
 import com.dressme.dressme_back.schema.dto.SlotPairScore;
@@ -13,10 +16,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -35,8 +36,8 @@ public class ColorScoreService {
             return new ColorScoreResponse(0.0, false, List.of(), warnings);
         }
 
-        double totalScore = 0.0;
-        List<SlotPairScore> pairScores = new ArrayList<>();
+        List<PairWeight> effectivePairs = new ArrayList<>();
+        List<ColorCompatibilityPairRequest> batchItems = new ArrayList<>();
 
         for (PairWeight pairWeight : pairWeights) {
             SlotColorInput left = bySlot.get(pairWeight.slotA);
@@ -45,11 +46,34 @@ public class ColorScoreService {
                 continue;
             }
 
-            double compatibilityScore = databaseClient.checkCompatibility(
+            effectivePairs.add(pairWeight);
+            batchItems.add(new ColorCompatibilityPairRequest(
                 left.hue(), left.saturation(), left.lightness(),
                 right.hue(), right.saturation(), right.lightness()
-            ).compatibilityScore();
+            ));
+        }
 
+        if (batchItems.isEmpty()) {
+            warnings.add("Insufficient slots to score color.");
+            return new ColorScoreResponse(0.0, false, List.of(), warnings);
+        }
+
+        List<DatabaseCompatibilityResponse> batchResponses = databaseClient
+            .checkCompatibilityBatch(new ColorCompatibilityBatchRequest(batchItems));
+
+        if (batchResponses.size() != batchItems.size()) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Color compatibility batch response size mismatch."
+            );
+        }
+
+        double totalScore = 0.0;
+        List<SlotPairScore> pairScores = new ArrayList<>();
+
+        for (int i = 0; i < effectivePairs.size(); i++) {
+            PairWeight pairWeight = effectivePairs.get(i);
+            double compatibilityScore = batchResponses.get(i).compatibilityScore();
             double weightedScore = compatibilityScore * pairWeight.weight;
             totalScore += weightedScore;
 

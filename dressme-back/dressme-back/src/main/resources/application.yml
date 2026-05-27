@@ -8,6 +8,11 @@ spring:
     openfeign:
       okhttp:
         enabled: true
+      client:
+        config:
+          dressme-database-color-client:
+            connectTimeout: 2000
+            readTimeout: 3000
   # ──  Añadimos el validador del Token JWT de Google ──────────────────────
   security:
     oauth2:
