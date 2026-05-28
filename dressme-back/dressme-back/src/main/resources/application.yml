@@ -13,20 +13,22 @@ spring:
           dressme-database-color-client:
             connectTimeout: 2000
             readTimeout: 3000
-  # ──  Añadimos el validador del Token JWT de Google ──────────────────────
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: https://accounts.google.com
+          dressme-database-taste-client:
+            connectTimeout: 2000
+            readTimeout: 3000
 
 # ── URLs de microservicios internos ───────────────────────────────────────────
-# Leídas por OnboardingOrchestratorServiceImpl vía @Value.
-# Los valores coinciden con los nombres de contenedor del docker-compose.yml.
 app:
   services:
     database-url: ${DATABASE_SERVICE_URL:http://dressme-database:8080}
     ai-url: ${AI_SERVICE_URL:http://dressme-ai:8000}
+  security:
+    jwt-secret: ${JWT_SECRET:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}
+
+google:
+  oauth:
+    userinfo-url: https://www.googleapis.com/oauth2/v3/userinfo
+
 logging:
   level:
-    org.springframework.security: TRACE
+    org.springframework.security: INFO
