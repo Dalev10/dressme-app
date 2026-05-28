@@ -10,4 +10,5 @@ public interface ColorService {
     ColorResponseDTO getComplementaryColor(UUID baseColorId);
     List<ColorResponseDTO> getAnalogousColors(UUID baseColorID);
     ColorResponseDTO getClosestColor(int hue, int saturation, int lightness);
+    
 }

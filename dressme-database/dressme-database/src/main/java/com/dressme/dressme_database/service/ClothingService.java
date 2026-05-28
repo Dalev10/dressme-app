@@ -1,57 +1,51 @@
 package com.dressme.dressme_database.service;
 
-import com.dressme.dressme_database.schema.dto.AuditUpdateRequest;
-import com.dressme.dressme_database.schema.dto.CatalogDTO;
-import com.dressme.dressme_database.schema.dto.ClothingCreateRequest;
-import com.dressme.dressme_database.schema.dto.ClothingItemResponse;
+import com.dressme.dressme_database.schema.dto.*;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface ClothingService {
 
-    /**
-     * Paso 1 — Registro inicial de la prenda.
-     *
-     * Persiste la prenda con imageUrl y is_processed = false.
-     * La categoría queda NULL hasta que dressme-ai complete el análisis.
-     *
-     * @return la prenda creada con su UUID asignado.
-     */
+    /** Paso 1 — Registro inicial (imagen subida, isProcessed=false). */
     ClothingItemResponse createClothing(ClothingCreateRequest request);
 
-    /**
-     * Paso 2 — Actualización post-análisis de Vision AI.
-     *
-     * Actualiza tbl_clothes (category_id, is_processed = true) y
-     * persiste o actualiza tbl_clothing_ai_audit con la predicción completa.
-     * Operación @Transactional: ambas tablas se actualizan en una sola unidad.
-     *
-     * @return la prenda con el estado actualizado.
-     */
+    /** Paso 2 — Aplicar resultado del análisis Vision+Gemini. */
     ClothingItemResponse applyAiAudit(AuditUpdateRequest request);
 
     /**
-     * Devuelve todas las prendas del guardarropa de un usuario,
-     * ordenadas por fecha de creación descendente.
+     * Lista resumida del guardarropa — para la vista grid del frontend.
+     * Devuelve ClothingItemResponse (ligero): id, imageUrl, category, isProcessed.
      */
     List<ClothingItemResponse> getWardrobeByUser(UUID userId);
 
     /**
-     * Devuelve una prenda específica por su ID.
+     * Detalle completo de una prenda — para la vista de detalle y edición.
+     * Devuelve ClothingDetailResponse: prenda + todos los campos del audit IA.
      * Lanza RuntimeException (→ 404) si no existe.
      */
-    ClothingItemResponse getClothingById(UUID clothingId);
+    ClothingDetailResponse getClothingDetail(UUID clothingId);
 
     /**
-     * Elimina una prenda y sus registros dependientes (audit, colores, estilos…).
+     * Corrección manual de los campos predichos por la IA.
+     * Actualiza tbl_clothes (category) + tbl_clothing_ai_audit (style, color,
+     * weather, occasion) y marca was_corrected = true.
+     * Lanza RuntimeException (→ 404) si la prenda no existe o no pertenece al usuario.
+     *
+     * @return el detalle actualizado para que el frontend refleje los cambios.
+     */
+    ClothingDetailResponse updateClothing(UUID clothingId, UUID userId, ClothingUpdateRequest request);
+
+    /**
+     * Elimina la prenda y su registro de auditoría IA.
+     * La imagen en el volumen la elimina dressme-back (tiene acceso al StorageService).
      * Lanza RuntimeException (→ 404) si no existe o no pertenece al usuario.
      */
     void deleteClothing(UUID clothingId, UUID userId);
 
     /**
-     * Catálogo de referencia: categorías, ocasiones y climas activos.
-     * Usado por el frontend para poblar filtros y dropdowns de corrección.
+     * Catálogo completo: categorías + estilos + colores + ocasiones + climas.
+     * Para dropdowns de corrección manual y filtros del guardarropa.
      */
     CatalogDTO getCatalog();
 }
