@@ -29,6 +29,15 @@ public class InternalOnboardingController {
     }
 
     @PostMapping("/calibrate")
+public OnboardingCalibrationResponse calibrate(
+    @RequestHeader("X-User-Id") String secureUserId, // 👈 Cambiamos Jwt por el Header
+    @Valid @RequestBody OnboardingSelectionRequest request
+) {
+    log.info("Onboarding Controller: calibración para usuario {}", secureUserId);
+    
+    // Ahora secureUserId ya es el string con el UUID del usuario
+    return onboardingService.calibrate(secureUserId, request);
+}
     public OnboardingCalibrationResponse calibrate(
         @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
         @Valid @RequestBody OnboardingSelectionRequest request

@@ -1,11 +1,12 @@
 package com.dressme.dressme_gateway.controller;
 
+import com.dressme.dressme_gateway.infra.security.JwtTokenProvider;
 import com.dressme.dressme_gateway.schema.dto.OnboardingCalibrationResponse;
 import com.dressme.dressme_gateway.schema.dto.OnboardingSelectionRequest;
 import com.dressme.dressme_gateway.schema.dto.StyleCardDTO;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -16,26 +17,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
-/**
- * Gateway de onboarding. Propaga las peticiones al backend interno,
- * reenviando el token JWT del cliente para que el backend lo valide.
- *
- * El manejo de errores HTTP (401, 403, 5xx) está centralizado en
- * BackendErrorHandler vía RestClientConfig. No es necesario .onStatus() aquí.
- */
 @RestController
 @RequestMapping("/api/v1/onboarding")
 @Slf4j
+@RequiredArgsConstructor
 public class OnboardingController {
 
     private final RestClient backClient;
-
-    public OnboardingController(
-        RestClient.Builder restClientBuilder,
-        @Value("${app.services.backend-url}") String backendUrl
-    ) {
-        this.backClient = restClientBuilder.baseUrl(backendUrl).build();
-    }
+    private final JwtTokenProvider jwtTokenProvider;
 
     @GetMapping("/style-cards")
     public ResponseEntity<List<StyleCardDTO>> getStyleCards(
@@ -44,9 +33,11 @@ public class OnboardingController {
         log.info("Gateway-Onboarding: GET /style-cards");
         requireBearerToken(authHeader);
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         List<StyleCardDTO> cards = backClient.get()
             .uri("/internal/onboarding/style-cards")
-            .header(HttpHeaders.AUTHORIZATION, authHeader)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
             .retrieve()
             .body(new ParameterizedTypeReference<>() {});
 
@@ -58,12 +49,17 @@ public class OnboardingController {
         @Valid @RequestBody OnboardingSelectionRequest request,
         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader
     ) {
-        log.info("Gateway-Onboarding: POST /calibrate. Reenviando peticion al backend");
+        log.info("Gateway-Onboarding: POST /calibrate");
         requireBearerToken(authHeader);
+
+        String userToken = authHeader.substring(7);
+        String userId = jwtTokenProvider.getUserIdFromToken(userToken);
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
 
         OnboardingCalibrationResponse response = backClient.post()
             .uri("/internal/onboarding/calibrate")
-            .header(HttpHeaders.AUTHORIZATION, authHeader)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
+            .header("X-User-Id", userId)
             .body(request)
             .retrieve()
             .body(OnboardingCalibrationResponse.class);
@@ -71,10 +67,6 @@ public class OnboardingController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Validación defensiva en el Gateway antes de propagar al backend.
-     * Evita llamadas al backend que sabemos que van a fallar con 401.
-     */
     private void requireBearerToken(String authHeader) {
         if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
             log.warn("Gateway-Onboarding: Petición rechazada — falta Authorization Bearer");
