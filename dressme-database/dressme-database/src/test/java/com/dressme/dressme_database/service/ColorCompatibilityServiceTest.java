@@ -2,7 +2,6 @@ package com.dressme.dressme_database.service;
 
 import com.dressme.dressme_database.repository.ColorCompatibilityRepository;
 import com.dressme.dressme_database.service.impl.ColorCompatibilityServiceImpl;
-import com.dressme.dressme_database.util.ColorTheoryUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
