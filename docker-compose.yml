@@ -43,6 +43,8 @@ services:
       - "8081:8080"
     depends_on:
       - dressme-database
+    volumes:
+      - ./wardrobe-images:/app/images
     networks:
       - dressme-network
 
@@ -83,3 +85,4 @@ networks:
 
 volumes:
   postgres_data:
+  wardrobe_images:

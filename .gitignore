@@ -25,3 +25,6 @@ out/
 *.pid
 *.seed
 postgres-data/
+
+# ./notes/scripts/
+notes/

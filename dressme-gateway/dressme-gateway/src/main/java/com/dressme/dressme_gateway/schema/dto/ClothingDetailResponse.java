@@ -1,13 +1,13 @@
-package com.dressme.dressme_back.schema.dto;
+package com.dressme.dressme_gateway.schema.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Payload enriquecido para GET /wardrobe/{clothingId}.
+ * Payload enriquecido para GET /api/v1/wardrobe/{clothingId}.
  *
- * Combina tbl_clothes + tbl_clothing_ai_audit + todas sus referencias
+ * Combina datos de la prenda + auditoría IA + todas sus referencias
  * en una sola respuesta. El frontend lo usa para la vista de detalle
  * de una prenda y para pre-poblar el formulario de edición manual.
  *
@@ -28,11 +28,11 @@ public record ClothingDetailResponse(
     LocalDateTime createdAt,
     boolean isProcessed,
 
-    // ── Categoría (de tbl_clothes) ────────────────────────────────────────────
+    // ── Categoría ─────────────────────────────────────────────────────────────
     UUID categoryId,
     String categoryName,
 
-    // ── Datos del audit IA (de tbl_clothing_ai_audit) ─────────────────────────
+    // ── Datos del audit IA ────────────────────────────────────────────────────
     /** null si la IA aún no procesó la prenda */
     UUID styleId,
     String styleName,

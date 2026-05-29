@@ -54,6 +54,13 @@ public class Clothing {
     @Column(name = "is_processed")
     private boolean isProcessed = false; // Indica si la IA ya terminó el mapping
 
+    @Column(name = "embedding_vector", columnDefinition = "TEXT")
+    private String embeddingVector; // Vector de embeddings (JSON serializado o encoded)
+
+    @Builder.Default
+    @Column(name = "is_embedding_stale")
+    private boolean isEmbeddingStale = false; // true si el usuario corrigió la prenda después de vectorizar
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

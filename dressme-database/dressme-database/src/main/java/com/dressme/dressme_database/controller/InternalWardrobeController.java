@@ -48,6 +48,12 @@ public class InternalWardrobeController {
     @PatchMapping("/audit")
     public ResponseEntity<ClothingItemResponse> applyAiAudit(
             @Valid @RequestBody AuditUpdateRequest request) {
+        log.info("DB-Wardrobe: PATCH /audit — clothingId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}",
+                request.clothingId(),
+                request.predictedColorId(),
+                request.detectedHue(),
+                request.detectedSaturation(),
+                request.detectedLightness());
         log.info("DB-Wardrobe: PATCH /audit — prenda {}", request.clothingId());
         return ResponseEntity.ok(clothingService.applyAiAudit(request));
     }

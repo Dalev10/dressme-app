@@ -1,8 +1,8 @@
 package com.dressme.dressme_back.service.impl;
 
+import com.dressme.dressme_back.config.StorageProperties;
 import com.dressme.dressme_back.service.StorageService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,21 +32,16 @@ import java.util.UUID;
 @Slf4j
 public class LocalStorageServiceImpl implements StorageService {
 
-    /**
-     * Ruta base del volumen montado. Se inyecta desde application.yml:
-     *   storage.path: /app/images
-     * En desarrollo local se puede apuntar a ./wardrobe-images.
-     */
-    @Value("${storage.path}")
-    private String storagePath;
+    private final StorageProperties storageProperties;
 
     /**
-     * URL base pública interna (visible para los contenedores de la red Docker).
-     * Se inyecta desde application.yml:
+     * Constructor que inyecta StorageProperties configuradas desde application.yml:
+     *   storage.path: /app/images
      *   storage.base-url: http://dressme-back:8080/images
      */
-    @Value("${storage.base-url}")
-    private String storageBaseUrl;
+    public LocalStorageServiceImpl(StorageProperties storageProperties) {
+        this.storageProperties = storageProperties;
+    }
 
     /**
      * Guarda el archivo multipart bajo {storagePath}/{userId}/{uuid}.{ext}
@@ -64,7 +59,7 @@ public class LocalStorageServiceImpl implements StorageService {
 
         String extension  = resolveExtension(file.getOriginalFilename());
         String filename   = UUID.randomUUID() + "." + extension;
-        Path   targetDir  = Paths.get(storagePath, userId.toString());
+        Path   targetDir  = Paths.get(storageProperties.getPath(), userId.toString());
         Path   targetFile = targetDir.resolve(filename);
 
         try {
@@ -77,7 +72,7 @@ public class LocalStorageServiceImpl implements StorageService {
         }
 
         // URL interna: http://dressme-back:8080/images/{userId}/{filename}
-        return storageBaseUrl + "/" + userId + "/" + filename;
+        return storageProperties.getBaseUrl() + "/" + userId + "/" + filename;
     }
 
     /**
@@ -91,8 +86,8 @@ public class LocalStorageServiceImpl implements StorageService {
         if (imageUrl == null || imageUrl.isBlank()) return;
 
         // Extraer la ruta relativa: eliminar el prefijo base de la URL
-        String relativePath = imageUrl.replace(storageBaseUrl + "/", "");
-        Path   filePath     = Paths.get(storagePath, relativePath);
+        String relativePath = imageUrl.replace(storageProperties.getBaseUrl() + "/", "");
+        Path   filePath     = Paths.get(storageProperties.getPath(), relativePath);
 
         try {
             boolean deleted = Files.deleteIfExists(filePath);

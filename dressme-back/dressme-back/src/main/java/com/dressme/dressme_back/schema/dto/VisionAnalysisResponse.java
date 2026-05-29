@@ -5,6 +5,10 @@
 // Este DTO es el contrato entre dressme-back y dressme-ai.
 // dressme-back lo recibe y lo transforma en AuditUpdateRequest
 // para persistir en dressme-database.
+//
+// ESTRUCTURA APLANADA: Los valores HSL del color se envían como campos
+// individuales (detectedHue, detectedSaturation, detectedLightness) en lugar
+// de un objeto anidado, para homogeneidad del pipeline completo.
 
 package com.dressme.dressme_back.schema.dto;
 
@@ -22,8 +26,17 @@ public record VisionAnalysisResponse(
     /** Estilo resuelta por Gemini */
     UUID predictedStyleId,
 
-    /** Color dominante resuelto por Vision */
+    /** Color dominante predicho (debe existir en tbl_colors) */
     UUID predictedColorId,
+
+    /** Hue detectado por Gemini Vision [0-360] */
+    Integer detectedHue,
+
+    /** Saturation detectado por Gemini Vision [0-100] */
+    Integer detectedSaturation,
+
+    /** Lightness detectado por Gemini Vision [0-100] */
+    Integer detectedLightness,
 
     /** Clima predicho por Gemini */
     UUID predictedWeatherId,
@@ -40,7 +53,7 @@ public record VisionAnalysisResponse(
 
     /**
      * Proveedor que realizó el análisis.
-     * Valor esperado: "google_vision" (con mapeo Gemini).
+     * Valor esperado: "gemini_vision".
      */
     String aiProvider
 

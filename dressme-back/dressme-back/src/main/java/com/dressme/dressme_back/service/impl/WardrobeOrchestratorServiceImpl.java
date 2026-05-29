@@ -58,7 +58,7 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
 
     @Async
     protected void triggerVisionAnalysis(UUID clothingId, String imageUrl) {
-        log.info("Wardrobe[async]: Enviando {} a dressme-ai", clothingId);
+        log.info("Back-Wardrobe[async]: Enviando {} a dressme-ai", clothingId);
         try {
             VisionAnalysisResponse aiResponse = aiClient.post()
                     .uri("/ai/wardrobe/analyze")
@@ -70,24 +70,49 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                     })
                     .body(VisionAnalysisResponse.class);
 
+            log.info("Back-Wardrobe[async]: Respuesta recibida de dressme-ai: clothingId={}, predictedCategoryId={}, predictedStyleId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}, predictedWeatherId={}, predictedOccasionId={}, confidence={}, aiProvider={}",
+                    aiResponse.clothingId(),
+                    aiResponse.predictedCategoryId(),
+                    aiResponse.predictedStyleId(),
+                    aiResponse.predictedColorId(),
+                    aiResponse.detectedHue(),
+                    aiResponse.detectedSaturation(),
+                    aiResponse.detectedLightness(),
+                    aiResponse.predictedWeatherId(),
+                    aiResponse.predictedOccasionId(),
+                    aiResponse.confidenceScore(),
+                    aiResponse.aiProvider());
+
+            AuditUpdateRequest auditRequest = new AuditUpdateRequest(
+                    aiResponse.clothingId(),
+                    aiResponse.predictedCategoryId(),
+                    aiResponse.predictedStyleId(),
+                    aiResponse.predictedColorId(),
+                    aiResponse.detectedHue(),
+                    aiResponse.detectedSaturation(),
+                    aiResponse.detectedLightness(),
+                    aiResponse.predictedWeatherId(),
+                    aiResponse.predictedOccasionId(),
+                    aiResponse.confidenceScore(),
+                    aiResponse.aiProvider());
+
+            log.info("Back-Wardrobe[async]: Enviando audit a dressme-database: clothingId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}",
+                    auditRequest.clothingId(),
+                    auditRequest.predictedColorId(),
+                    auditRequest.detectedHue(),
+                    auditRequest.detectedSaturation(),
+                    auditRequest.detectedLightness());
+
             databaseClient.patch()
                     .uri("/internal/wardrobe/audit")
-                    .body(new AuditUpdateRequest(
-                            aiResponse.clothingId(),
-                            aiResponse.predictedCategoryId(),
-                            aiResponse.predictedStyleId(),
-                            aiResponse.predictedColorId(),
-                            aiResponse.predictedWeatherId(),
-                            aiResponse.predictedOccasionId(),
-                            aiResponse.confidenceScore(),
-                            aiResponse.aiProvider()))
+                    .body(auditRequest)
                     .retrieve()
                     .toBodilessEntity();
 
-            log.info("Wardrobe[async]: Audit aplicado para prenda {}", clothingId);
+            log.info("Back-Wardrobe[async]: Audit aplicado exitosamente para prenda {}", clothingId);
 
         } catch (Exception e) {
-            log.error("Wardrobe[async]: Error analizando prenda {}: {}", clothingId,
+            log.error("Back-Wardrobe[async]: Error analizando prenda {}: {}", clothingId,
                     e.getMessage());
             // La prenda queda isProcessed=false; re-análisis futuro la puede recuperar.
         }

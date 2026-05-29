@@ -83,6 +83,12 @@ public class ClothingServiceImpl implements ClothingService {
                 .ifPresent(audit::setPredictedStyle);
         colorRepository.findById(request.predictedColorId())
                 .ifPresent(audit::setPredictedColor);
+
+        // Persistir valores HSL detectados exactamente por Gemini Vision
+        audit.setDetectedHue(request.detectedHue());
+        audit.setDetectedSaturation(request.detectedSaturation());
+        audit.setDetectedLightness(request.detectedLightness());
+
         weatherRepository.findById(request.predictedWeatherId())
                 .ifPresent(audit::setPredictedWeather);
         occasionRepository.findById(request.predictedOccasionId())
@@ -157,6 +163,10 @@ public class ClothingServiceImpl implements ClothingService {
 
         // Actualizar categoría en tbl_clothes
         clothing.setCategory(category);
+        // ✦ Marcar embedding como desactualizado: el usuario corrigió la prenda
+        // después de que se vectorizó, así que el embedding es inválido.
+        // El motor de recomendación lo detectará y re-vectorizará antes de calcular outfits.
+        clothing.setEmbeddingStale(true);
         clothingRepository.save(clothing);
 
         // Actualizar audit — crear si aún no existe (prenda no procesada por IA
@@ -270,6 +280,10 @@ public class ClothingServiceImpl implements ClothingService {
                 audit != null && audit.getPredictedColor()    != null ? audit.getPredictedColor().getId()      : null,
                 audit != null && audit.getPredictedColor()    != null ? audit.getPredictedColor().getName()    : null,
                 audit != null && audit.getPredictedColor()    != null ? hslToHex(audit.getPredictedColor())    : null,
+                // Valores HSL detectados por Gemini Vision
+                audit != null ? audit.getDetectedHue()        : null,
+                audit != null ? audit.getDetectedSaturation() : null,
+                audit != null ? audit.getDetectedLightness()  : null,
                 // Clima
                 audit != null && audit.getPredictedWeather()  != null ? audit.getPredictedWeather().getId()   : null,
                 audit != null && audit.getPredictedWeather()  != null ? audit.getPredictedWeather().getName() : null,
@@ -279,7 +293,8 @@ public class ClothingServiceImpl implements ClothingService {
                 // Audit metadata
                 audit != null ? audit.getConfidenceScore() : null,
                 audit != null && audit.isWasCorrected(),
-                audit != null ? audit.getAiProvider() : null
+                audit != null ? audit.getAiProvider() : null,
+                c.isEmbeddingStale()
         );
     }
 

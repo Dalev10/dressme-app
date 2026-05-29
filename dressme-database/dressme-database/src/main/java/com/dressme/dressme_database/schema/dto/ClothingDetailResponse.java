@@ -42,6 +42,15 @@ public record ClothingDetailResponse(
     /** Hex aproximado calculado desde HSL del catálogo — útil para la UI */
     String colorHex,
 
+    /** Hue detectado por Gemini Vision [0-360] */
+    Integer detectedHue,
+
+    /** Saturation detectado por Gemini Vision [0-100] */
+    Integer detectedSaturation,
+
+    /** Lightness detectado por Gemini Vision [0-100] */
+    Integer detectedLightness,
+
     UUID weatherId,
     String weatherName,
 
@@ -58,6 +67,13 @@ public record ClothingDetailResponse(
     boolean wasCorrected,
 
     /** Proveedor que hizo el análisis: "google_vision", "clarifai" */
-    String aiProvider
+    String aiProvider,
+
+    /**
+     * true si el embedding_vector en tbl_clothes está desactualizado.
+     * Ocurre cuando el usuario corrige la prenda después de la vectorización IA.
+     * El motor de recomendación lo usa para saber qué prendas necesitan re-vectorizar.
+     */
+    boolean isEmbeddingStale
 
 ) {}

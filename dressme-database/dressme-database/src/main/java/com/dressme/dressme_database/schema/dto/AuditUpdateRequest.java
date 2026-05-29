@@ -35,6 +35,18 @@ public record AuditUpdateRequest(
     @NotNull(message = "El color predicho es obligatorio")
     UUID predictedColorId,
 
+    /** Hue detectado por Gemini Vision [0-360] */
+    @NotNull(message = "El hue detectado es obligatorio")
+    Integer detectedHue,
+
+    /** Saturation detectado por Gemini Vision [0-100] */
+    @NotNull(message = "El saturation detectado es obligatorio")
+    Integer detectedSaturation,
+
+    /** Lightness detectado por Gemini Vision [0-100] */
+    @NotNull(message = "El lightness detectado es obligatorio")
+    Integer detectedLightness,
+
     /** Condición climática predicha (debe existir en tbl_weather) */
     @NotNull(message = "El clima predicho es obligatorio")
     UUID predictedWeatherId,

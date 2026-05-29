@@ -50,6 +50,46 @@ public interface OnboardingOrchestratorService {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/StorageService.java
+
+package com.dressme.dressme_back.service;
+
+import org.springframework.web.multipart.MultipartFile;
+import java.util.UUID;
+
+/**
+ * Abstracción del servicio de almacenamiento de imágenes.
+ *
+ * Implementaciones:
+ *   - LocalStorageServiceImpl  → volumen Docker (MVP)
+ *   - GcsStorageServiceImpl    → Google Cloud Storage (producción)
+ *
+ * Para cambiar de implementación en producción basta con:
+ *   1. Crear GcsStorageServiceImpl anotado con @Profile("prod")
+ *   2. Anotar LocalStorageServiceImpl con @Profile("dev")
+ *   No se modifica ningún otro archivo.
+ */
+public interface StorageService {
+
+    /**
+     * Guarda el archivo y devuelve su URL de acceso.
+     *
+     * @param userId propietario de la imagen.
+     * @param file   multipart recibido del cliente.
+     * @return URL interna (volumen local) o pública (GCS).
+     */
+    String store(UUID userId, MultipartFile file);
+
+    /**
+     * Elimina el archivo asociado a la URL dada.
+     * No lanza excepción si el archivo ya no existe.
+     *
+     * @param imageUrl URL devuelta por store().
+     */
+    void delete(String imageUrl);
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/impl/OnboardingOrchestratorServiceImpl.java
 
 package com.dressme.dressme_back.service.impl;
@@ -241,6 +281,328 @@ public class OnboardingOrchestratorServiceImpl implements OnboardingOrchestrator
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/impl/LocalStorageServiceImpl.java
+
+package com.dressme.dressme_back.service.impl;
+
+import com.dressme.dressme_back.config.StorageProperties;
+import com.dressme.dressme_back.service.StorageService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+
+/**
+ * Implementación de StorageService que guarda imágenes en el volumen Docker local.
+ *
+ * Estrategia:
+ *   - dressme-back recibe el multipart y guarda la imagen bajo:
+ *       /app/images/{userId}/{uuid}.{ext}
+ *   - Genera una URL interna accesible desde cualquier contenedor en la red Docker:
+ *       http://dressme-back:8080/images/{userId}/{uuid}.{ext}
+ *   - El directorio /app/images está montado como volumen en docker-compose:
+ *       ./wardrobe-images:/app/images
+ *
+ * Migración a GCS en producción:
+ *   Solo hay que crear GcsStorageServiceImpl implementando la misma interfaz
+ *   y activar el perfil "prod". dressme-back no cambia nada más.
+ */
+@Service
+@Slf4j
+public class LocalStorageServiceImpl implements StorageService {
+
+    private final StorageProperties storageProperties;
+
+    /**
+     * Constructor que inyecta StorageProperties configuradas desde application.yml:
+     *   storage.path: /app/images
+     *   storage.base-url: http://dressme-back:8080/images
+     */
+    public LocalStorageServiceImpl(StorageProperties storageProperties) {
+        this.storageProperties = storageProperties;
+    }
+
+    /**
+     * Guarda el archivo multipart bajo {storagePath}/{userId}/{uuid}.{ext}
+     * y devuelve la URL interna completa.
+     *
+     * @param userId    UUID del usuario propietario de la prenda.
+     * @param file      Archivo de imagen recibido del cliente.
+     * @return URL interna accesible desde la red Docker.
+     * @throws RuntimeException si el archivo está vacío, tiene tipo no soportado,
+     *                          o falla la escritura en disco.
+     */
+    @Override
+    public String store(UUID userId, MultipartFile file) {
+        validateFile(file);
+
+        String extension  = resolveExtension(file.getOriginalFilename());
+        String filename   = UUID.randomUUID() + "." + extension;
+        Path   targetDir  = Paths.get(storageProperties.getPath(), userId.toString());
+        Path   targetFile = targetDir.resolve(filename);
+
+        try {
+            Files.createDirectories(targetDir);
+            Files.copy(file.getInputStream(), targetFile, StandardCopyOption.REPLACE_EXISTING);
+            log.info("Storage: Imagen guardada en {}", targetFile);
+        } catch (IOException e) {
+            log.error("Storage: Error al guardar imagen para usuario {}: {}", userId, e.getMessage());
+            throw new RuntimeException("Error al guardar la imagen en el servidor", e);
+        }
+
+        // URL interna: http://dressme-back:8080/images/{userId}/{filename}
+        return storageProperties.getBaseUrl() + "/" + userId + "/" + filename;
+    }
+
+    /**
+     * Elimina el archivo físico dado su URL interna.
+     * Usado cuando el usuario borra una prenda.
+     *
+     * @param imageUrl URL interna generada por store().
+     */
+    @Override
+    public void delete(String imageUrl) {
+        if (imageUrl == null || imageUrl.isBlank()) return;
+
+        // Extraer la ruta relativa: eliminar el prefijo base de la URL
+        String relativePath = imageUrl.replace(storageProperties.getBaseUrl() + "/", "");
+        Path   filePath     = Paths.get(storageProperties.getPath(), relativePath);
+
+        try {
+            boolean deleted = Files.deleteIfExists(filePath);
+            if (deleted) {
+                log.info("Storage: Imagen eliminada: {}", filePath);
+            } else {
+                log.warn("Storage: Imagen no encontrada para eliminar: {}", filePath);
+            }
+        } catch (IOException e) {
+            // No se lanza excepción: una imagen huérfana no debe bloquear la operación
+            log.error("Storage: Error al eliminar imagen {}: {}", filePath, e.getMessage());
+        }
+    }
+
+    // ── Helpers privados ──────────────────────────────────────────────────────
+
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new RuntimeException("El archivo de imagen está vacío o no fue enviado");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null ||
+                (!contentType.equals("image/jpeg") &&
+                 !contentType.equals("image/png")  &&
+                 !contentType.equals("image/webp"))) {
+            throw new RuntimeException(
+                    "Tipo de archivo no soportado: " + contentType +
+                    ". Use JPEG, PNG o WebP.");
+        }
+    }
+
+    private String resolveExtension(String originalFilename) {
+        if (originalFilename != null && originalFilename.contains(".")) {
+            return originalFilename.substring(originalFilename.lastIndexOf('.') + 1).toLowerCase();
+        }
+        return "jpg"; // fallback
+    }
+}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/impl/WardrobeOrchestratorServiceImpl.java
+
+package com.dressme.dressme_back.service.impl;
+
+import com.dressme.dressme_back.schema.dto.*;
+import com.dressme.dressme_back.service.StorageService;
+import com.dressme.dressme_back.service.WardrobeOrchestratorService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@Slf4j
+public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorService {
+
+    private final StorageService storageService;
+    private final RestClient     databaseClient;
+    private final RestClient     aiClient;
+
+    public WardrobeOrchestratorServiceImpl(
+            StorageService storageService,
+            RestClient.Builder restClientBuilder,
+            @Value("${app.services.database-url}") String databaseUrl,
+            @Value("${app.services.ai-url}")       String aiUrl
+    ) {
+        this.storageService = storageService;
+        this.databaseClient = restClientBuilder.baseUrl(databaseUrl).build();
+        this.aiClient       = restClientBuilder.baseUrl(aiUrl).build();
+    }
+
+    // ── Upload ────────────────────────────────────────────────────────────────
+
+    @Override
+    public ClothingItemResponse uploadClothing(ClothingUploadRequest request, MultipartFile file) {
+        log.info("Wardrobe: Upload para usuario {}", request.userId());
+
+        String imageUrl = storageService.store(request.userId(), file);
+
+        ClothingItemResponse created = databaseClient.post()
+                .uri("/internal/wardrobe")
+                .body(new ClothingCreateRequest(request.userId(), imageUrl))
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    throw new RuntimeException("dressme-database rechazó el registro");
+                })
+                .body(ClothingItemResponse.class);
+
+        log.info("Wardrobe: Prenda {} registrada — disparando análisis IA", created.id());
+        triggerVisionAnalysis(created.id(), imageUrl);
+        return created;
+    }
+
+    @Async
+    protected void triggerVisionAnalysis(UUID clothingId, String imageUrl) {
+        log.info("Wardrobe[async]: Enviando {} a dressme-ai", clothingId);
+        try {
+            VisionAnalysisResponse aiResponse = aiClient.post()
+                    .uri("/ai/wardrobe/analyze")
+                    .body(new VisionAnalysisRequest(clothingId, imageUrl))
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (req, res) -> {
+                        throw new RuntimeException(
+                                "dressme-ai falló para prenda " + clothingId);
+                    })
+                    .body(VisionAnalysisResponse.class);
+
+            databaseClient.patch()
+                    .uri("/internal/wardrobe/audit")
+                    .body(new AuditUpdateRequest(
+                            aiResponse.clothingId(),
+                            aiResponse.predictedCategoryId(),
+                            aiResponse.predictedStyleId(),
+                            aiResponse.detectedColorHsl().colorCatalogId(),
+                            aiResponse.detectedColorHsl(),
+                            aiResponse.predictedWeatherId(),
+                            aiResponse.predictedOccasionId(),
+                            aiResponse.confidenceScore(),
+                            aiResponse.aiProvider()))
+                    .retrieve()
+                    .toBodilessEntity();
+
+            log.info("Wardrobe[async]: Audit aplicado para prenda {}", clothingId);
+
+        } catch (Exception e) {
+            log.error("Wardrobe[async]: Error analizando prenda {}: {}", clothingId,
+                    e.getMessage());
+            // La prenda queda isProcessed=false; re-análisis futuro la puede recuperar.
+        }
+    }
+
+    // ── Lista resumida ────────────────────────────────────────────────────────
+
+    @Override
+    public List<ClothingItemResponse> getWardrobe(UUID userId) {
+        return databaseClient.get()
+                .uri("/internal/wardrobe/user/{userId}", userId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<ClothingItemResponse>>() {});
+    }
+
+    // ── Detalle compuesto ─────────────────────────────────────────────────────
+
+    @Override
+    public ClothingDetailResponse getClothingDetail(UUID clothingId) {
+        return databaseClient.get()
+                .uri("/internal/wardrobe/{clothingId}", clothingId)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    throw new RuntimeException("Prenda no encontrada: " + clothingId);
+                })
+                .body(ClothingDetailResponse.class);
+    }
+
+    // ── Corrección manual ─────────────────────────────────────────────────────
+
+    @Override
+    public ClothingDetailResponse updateClothing(UUID clothingId, UUID userId,
+                                                  ClothingEditRequest request) {
+        log.info("Wardrobe: Corrección manual — prenda {} usuario {}", clothingId, userId);
+
+        // Transformar ClothingEditRequest → ClothingUpdateRequest (contrato de dressme-database)
+        ClothingUpdateRequest dbRequest = new ClothingUpdateRequest(
+                request.categoryId(),
+                request.styleId(),
+                request.colorId(),
+                request.weatherId(),
+                request.occasionId()
+        );
+
+        return databaseClient.patch()
+                .uri("/internal/wardrobe/{clothingId}?userId={userId}", clothingId, userId)
+                .body(dbRequest)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    throw new RuntimeException(
+                            "No se pudo actualizar la prenda: " + clothingId);
+                })
+                .body(ClothingDetailResponse.class);
+    }
+
+    // ── Eliminación ───────────────────────────────────────────────────────────
+
+    @Override
+    public void deleteClothing(UUID clothingId, UUID userId) {
+        // 1. Obtener imageUrl antes de borrar (para limpiar el volumen)
+        ClothingDetailResponse detail = getClothingDetail(clothingId);
+
+        // 2. Eliminar en dressme-database (verifica ownership)
+        databaseClient.delete()
+                .uri("/internal/wardrobe/{clothingId}?userId={userId}", clothingId, userId)
+                .retrieve()
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    throw new RuntimeException(
+                            "No se pudo eliminar la prenda: " + clothingId);
+                })
+                .toBodilessEntity();
+
+        // 3. Eliminar imagen del volumen Docker
+        if (detail != null && detail.imageUrl() != null) {
+            storageService.delete(detail.imageUrl());
+        }
+
+        log.info("Wardrobe: Prenda {} eliminada", clothingId);
+    }
+
+    // ── Catálogo ──────────────────────────────────────────────────────────────
+
+    @Override
+    public CatalogDTO getCatalog() {
+        return databaseClient.get()
+                .uri("/internal/wardrobe/catalog")
+                .retrieve()
+                .body(CatalogDTO.class);
+    }
+
+    // ── Inner record de request a dressme-ai ─────────────────────────────────
+
+    private record VisionAnalysisRequest(UUID clothingId, String imageUrl) {}
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/impl/AuthOrchestratorServiceImpl.java
 
 package com.dressme.dressme_back.service.impl;
@@ -333,6 +695,166 @@ public class AuthOrchestratorServiceImpl implements AuthOrchestratorService {
                     throw new RuntimeException("Error al intentar eliminar el recurso en Database");
                 })
                 .toBodilessEntity(); // No esperamos cuerpo de respuesta
+    }
+}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/service/WardrobeOrchestratorService.java
+
+package com.dressme.dressme_back.service;
+
+import com.dressme.dressme_back.schema.dto.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Orquestador completo del flujo Wardrobe en dressme-back.
+ */
+public interface WardrobeOrchestratorService {
+
+    /** Upload: guarda imagen + registra prenda + dispara análisis IA en @Async. */
+    ClothingItemResponse uploadClothing(ClothingUploadRequest request, MultipartFile file);
+
+    /** Lista resumida del guardarropa (ClothingItemResponse — para el grid). */
+    List<ClothingItemResponse> getWardrobe(UUID userId);
+
+    /**
+     * Detalle compuesto de una prenda (ClothingDetailResponse — para view/edit).
+     * Proxy a GET /internal/wardrobe/{clothingId} en dressme-database.
+     */
+    ClothingDetailResponse getClothingDetail(UUID clothingId);
+
+    /**
+     * Corrección manual de los campos predichos por la IA.
+     * Proxy a PATCH /internal/wardrobe/{clothingId} en dressme-database.
+     */
+    ClothingDetailResponse updateClothing(UUID clothingId, UUID userId,
+                                          ClothingEditRequest request);
+
+    /** Elimina prenda en dressme-database + imagen del volumen Docker. */
+    void deleteClothing(UUID clothingId, UUID userId);
+
+    /** Catálogo de referencia: categorías + estilos + colores + ocasiones + climas. */
+    CatalogDTO getCatalog();
+}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/controller/InternalWardrobeController.java
+
+package com.dressme.dressme_back.controller;
+
+import com.dressme.dressme_back.schema.dto.*;
+import com.dressme.dressme_back.service.WardrobeOrchestratorService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * CRUD completo del Wardrobe 
+ * Recibe peticiones del Gateway y delega al WardrobeOrchestratorService.
+ *
+ * Endpoints:
+ *   POST   /internal/wardrobe/upload          → subir prenda (multipart)
+ *   GET    /internal/wardrobe/catalog         → catálogo de filtros
+ *   GET    /internal/wardrobe/user/{userId}   → lista resumida (grid)
+ *   GET    /internal/wardrobe/{clothingId}    → detalle compuesto (view/edit)
+ *   PATCH  /internal/wardrobe/{clothingId}    → corrección manual
+ *   DELETE /internal/wardrobe/{clothingId}    → eliminar prenda + imagen
+ *
+ * Nota: /catalog y /user/{userId} van ANTES de /{clothingId} para evitar
+ * que Spring interprete "catalog" o "user" como un UUID.
+ */
+@RestController
+@RequestMapping("/internal/wardrobe")
+@RequiredArgsConstructor
+@Slf4j
+public class InternalWardrobeController {
+
+    private final WardrobeOrchestratorService wardrobeService;
+
+    // ── Upload ────────────────────────────────────────────────────────────────
+
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ClothingItemResponse> uploadClothing(
+            @RequestPart("userId") String userIdStr,
+            @RequestPart("image")  MultipartFile image) {
+
+        UUID userId = UUID.fromString(userIdStr);
+        log.info("Back-Wardrobe: POST /upload — usuario {}", userId);
+        ClothingItemResponse response = wardrobeService.uploadClothing(
+                new ClothingUploadRequest(userId), image);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // ── Catálogo (antes de /{clothingId} para evitar colisión de rutas) ───────
+
+    @GetMapping("/catalog")
+    public ResponseEntity<CatalogDTO> getCatalog() {
+        log.info("Back-Wardrobe: GET /catalog");
+        return ResponseEntity.ok(wardrobeService.getCatalog());
+    }
+
+    // ── Lista resumida ────────────────────────────────────────────────────────
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<ClothingItemResponse>> getWardrobe(
+            @PathVariable UUID userId) {
+        log.info("Back-Wardrobe: GET /user/{}", userId);
+        return ResponseEntity.ok(wardrobeService.getWardrobe(userId));
+    }
+
+    // ── Detalle compuesto ─────────────────────────────────────────────────────
+
+    /**
+     * GET /internal/wardrobe/{clothingId}
+     *
+     * Devuelve ClothingDetailResponse (prenda + audit completo).
+     * Todos los campos del audit son null si isProcessed=false.
+     */
+    @GetMapping("/{clothingId}")
+    public ResponseEntity<ClothingDetailResponse> getClothingDetail(
+            @PathVariable UUID clothingId) {
+        log.info("Back-Wardrobe: GET /{}", clothingId);
+        return ResponseEntity.ok(wardrobeService.getClothingDetail(clothingId));
+    }
+
+    // ── Corrección manual ─────────────────────────────────────────────────────
+
+    /**
+     * PATCH /internal/wardrobe/{clothingId}?userId={userId}
+     *
+     * El usuario corrige categoría, estilo, color, clima y ocasión.
+     * Responde con el detalle actualizado (evita un GET adicional del frontend).
+     */
+    @PatchMapping("/{clothingId}")
+    public ResponseEntity<ClothingDetailResponse> updateClothing(
+            @PathVariable UUID clothingId,
+            @RequestParam  UUID userId,
+            @Valid @RequestBody ClothingEditRequest request) {
+        log.info("Back-Wardrobe: PATCH /{} — usuario {}", clothingId, userId);
+        return ResponseEntity.ok(
+                wardrobeService.updateClothing(clothingId, userId, request));
+    }
+
+    // ── Eliminación ───────────────────────────────────────────────────────────
+
+    @DeleteMapping("/{clothingId}")
+    public ResponseEntity<Void> deleteClothing(
+            @PathVariable UUID clothingId,
+            @RequestParam  UUID userId) {
+        log.info("Back-Wardrobe: DELETE /{} — usuario {}", clothingId, userId);
+        wardrobeService.deleteClothing(clothingId, userId);
+        return ResponseEntity.noContent().build(); // 204
     }
 }
 
@@ -473,8 +995,10 @@ package com.dressme.dressme_back;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
+@EnableAsync
 public class DressmeBackApplication {
 
 	public static void main(String[] args) {
@@ -522,6 +1046,41 @@ public class UserUpdateRequest {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ClothingItemResponse.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Respuesta completa de una prenda del guardarropa.
+ *
+ * categoryId / categoryName son null cuando is_processed = false
+ * (la IA aún no terminó el análisis). El frontend debe manejar
+ * este estado mostrando un indicador de "Analizando…".
+ */
+public record ClothingItemResponse(
+
+    UUID id,
+    UUID userId,
+    String imageUrl,
+
+    /** null si la IA aún no procesó la prenda */
+    UUID categoryId,
+    String categoryName,
+
+    /**
+     * false = recién subida, pendiente de análisis Vision.
+     * true  = categoría, colores y ocasión ya asignados.
+     */
+    boolean isProcessed,
+
+    LocalDateTime createdAt
+
+) {}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ComputeTasteVectorRequest.java
 
 package com.dressme.dressme_back.schema.dto;
@@ -540,6 +1099,93 @@ public record ComputeTasteVectorRequest(
         String reaction   // "LIKE" | "DISLIKE" | "SKIP"
     ) {}
 }
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/VisionAnalysisResponse.java
+
+// ─── VisionAnalysisResponse.java ─────────────────────────────────────────────
+// Respuesta que devuelve dressme-ai después de analizar la imagen con Vision
+// y mapear los labels al catálogo mediante Gemini.
+//
+// Este DTO es el contrato entre dressme-back y dressme-ai.
+// dressme-back lo recibe y lo transforma en AuditUpdateRequest
+// para persistir en dressme-database.
+
+package com.dressme.dressme_back.schema.dto;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+public record VisionAnalysisResponse(
+
+    /** ID de la prenda que fue analizada (echo del request) */
+    UUID clothingId,
+
+    /** Categoría resuelta por Gemini a partir de los labels de Vision */
+    UUID predictedCategoryId,
+
+    /** Estilo resuelta por Gemini */
+    UUID predictedStyleId,
+
+    /** Color dominante y valores HSL detectados por Gemini Vision */
+    DetectedColorHSL detectedColorHsl,
+
+    /** Clima predicho por Gemini */
+    UUID predictedWeatherId,
+
+    /** Ocasión predicha por Gemini */
+    UUID predictedOccasionId,
+
+    /**
+     * Confianza del modelo entre 0.00 y 1.00.
+     * Se toma del score más alto de los labels de Vision
+     * después del mapeo semántico con Gemini.
+     */
+    BigDecimal confidenceScore,
+
+    /**
+     * Proveedor que realizó el análisis.
+     * Valor esperado: "gemini_vision".
+     */
+    String aiProvider
+
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ClothingEditRequest.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+/**
+ * Payload que llega del Gateway cuando el usuario corrige manualmente
+ * los campos de una prenda.
+ *
+ * Idéntico en estructura a ClothingUpdateRequest de dressme-database,
+ * pero vive en dressme-back para desacoplar los contratos de cada servicio.
+ * El orquestador lo transforma a ClothingUpdateRequest antes de llamar
+ * a dressme-database.
+ */
+public record ClothingEditRequest(
+
+    @NotNull(message = "La categoría es obligatoria")
+    UUID categoryId,
+
+    @NotNull(message = "El estilo es obligatorio")
+    UUID styleId,
+
+    @NotNull(message = "El color es obligatorio")
+    UUID colorId,
+
+    @NotNull(message = "El clima es obligatorio")
+    UUID weatherId,
+
+    @NotNull(message = "La ocasión es obligatoria")
+    UUID occasionId
+
+) {}
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ComputeTasteVectorResponse.java
@@ -574,6 +1220,124 @@ public record UserProfileResponse(
 ) {}
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/AuditUpdateRequest.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+/**
+ * Payload que envía el orquestador a dressme-database cuando termina
+ * el análisis Vision de una prenda.
+ *
+ * Descompone la respuesta de dressme-ai (VisionAnalysisResponse) agregando
+ * los valores HSL detectados que persisten en tbl_clothing_ai_audit.
+ *
+ * Paso 2 del flujo wardrobe: actualizar tbl_clothes + tbl_clothing_ai_audit.
+ *
+ * Todos los campos de predicción son obligatorios para garantizar que
+ * el motor de recomendaciones tenga datos completos con qué trabajar.
+ */
+public record AuditUpdateRequest(
+
+    /** ID de la prenda a actualizar */
+    @NotNull(message = "El clothingId es obligatorio")
+    UUID clothingId,
+
+    /** Categoría predicha por Vision (debe existir en tbl_clothing_categories) */
+    @NotNull(message = "La categoría predicha es obligatoria")
+    UUID predictedCategoryId,
+
+    /** Estilo predicho (debe existir en tbl_styles) */
+    @NotNull(message = "El estilo predicho es obligatorio")
+    UUID predictedStyleId,
+
+    /** Color dominante predicho (debe existir en tbl_colors) */
+    @NotNull(message = "El color predicho es obligatorio")
+    UUID predictedColorId,
+
+    /** Color HSL detectado exactamente por Gemini Vision */
+    @Valid
+    @NotNull(message = "Los valores HSL detectados son obligatorios")
+    DetectedColorHSL detectedColorHsl,
+
+    /** Condición climática predicha (debe existir en tbl_weather) */
+    @NotNull(message = "El clima predicho es obligatorio")
+    UUID predictedWeatherId,
+
+    /** Ocasión predicha (debe existir en tbl_occasions) */
+    @NotNull(message = "La ocasión predicha es obligatoria")
+    UUID predictedOccasionId,
+
+    /** Score de confianza del modelo [0.00 – 1.00] */
+    @NotNull
+    @DecimalMin(value = "0.00", message = "El confidence score debe ser >= 0")
+    @DecimalMax(value = "1.00", message = "El confidence score debe ser <= 1")
+    BigDecimal confidenceScore,
+
+    /**
+     * Nombre del proveedor IA que realizó el análisis.
+     * Valores esperados: "gemini_vision".
+     */
+    @NotBlank(message = "El aiProvider es obligatorio")
+    String aiProvider
+
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ClothingUploadRequest.java
+
+// ─── ClothingUploadRequest.java ──────────────────────────────────────────────
+// Lo que llega del Gateway: userId + el archivo multipart.
+// El archivo NO va en el JSON — el controller lo recibe con @RequestPart.
+// Este DTO transporta solo la parte estructurada de la petición.
+
+package com.dressme.dressme_back.schema.dto;
+
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+public record ClothingUploadRequest(
+
+    @NotNull(message = "El userId es obligatorio")
+    UUID userId
+
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/CatalogDTO.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Catálogo de referencia para poblar los filtros del frontend
+ * y los dropdowns de corrección manual de prendas.
+ *
+ * Se devuelve en una sola llamada para evitar 3 roundtrips separados
+ * (categorías + ocasiones + climas).
+ */
+public record CatalogDTO(
+    List<CategoryEntry> categories,
+    List<OccasionEntry> occasions,
+    List<WeatherEntry> weathers
+) {
+
+    public record CategoryEntry(UUID id, String name, UUID parentId) {}
+    public record OccasionEntry(UUID id, String name) {}
+    public record WeatherEntry(UUID id, String name) {}
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/UserResponseDTO.java
 
 package com.dressme.dressme_back.schema.dto;
@@ -600,6 +1364,34 @@ public class UserResponseDTO {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ClothingCreateRequest.java
+
+// ─── ClothingCreateRequest.java ──────────────────────────────────────────────
+// Paso 1 del flujo wardrobe: el usuario sube la imagen.
+// La categoría llega NULA intencionalmente; Vision la asignará en el Paso 2.
+
+package com.dressme.dressme_back.schema.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+public record ClothingCreateRequest(
+
+    @NotNull(message = "El userId es obligatorio")
+    UUID userId,
+
+    /**
+     * URL de la imagen ya almacenada en el CDN / storage externo.
+     * dressme-back sube la imagen antes de llamar a este endpoint
+     * y nos pasa la URL resultante.
+     */
+    @NotBlank(message = "La URL de imagen es obligatoria")
+    String imageUrl
+
+) {}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/StandardizedUserProviderInfo.java
 
 package com.dressme.dressme_back.schema.dto;
@@ -611,6 +1403,85 @@ public record StandardizedUserProviderInfo(
     String displayName,
     String profilePictureUrl
 ) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ClothingUpdateRequest.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+/**
+ * Payload para PATCH /wardrobe/{clothingId} — corrección manual de una prenda.
+ *
+ * El usuario puede corregir cualquier campo que la IA predijo incorrectamente.
+ * Todos los campos son obligatorios: la UI siempre envía el estado completo
+ * del formulario, no solo los campos modificados (simplifica la lógica de merge).
+ *
+ * Al persistir, ClothingServiceImpl marcará was_corrected = true en el audit,
+ * señal que el scoring engine usa para dar mayor peso a esta prenda.
+ */
+public record ClothingUpdateRequest(
+
+    @NotNull(message = "La categoría es obligatoria")
+    UUID categoryId,
+
+    @NotNull(message = "El estilo es obligatorio")
+    UUID styleId,
+
+    @NotNull(message = "El color es obligatorio")
+    UUID colorId,
+
+    @NotNull(message = "El clima es obligatorio")
+    UUID weatherId,
+
+    @NotNull(message = "La ocasión es obligatoria")
+    UUID occasionId
+
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/DetectedColorHSL.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+
+import java.util.UUID;
+
+/**
+ * Color dominante detectado por Gemini Vision en la prenda.
+ *
+ * hue/saturation/lightness → valores exactos para el scoring engine
+ *                            (armonía cromática: complementarios, análogos, triádicos)
+ * colorCatalogId          → UUID del color canónico más cercano del catálogo
+ *                           (para la UI: chip de color, filtros del guardarropa)
+ */
+public record DetectedColorHSL(
+
+    @NotNull(message = "El hue es obligatorio")
+    @Min(value = 0, message = "El hue debe estar entre 0 y 360")
+    @Max(value = 360, message = "El hue debe estar entre 0 y 360")
+    Integer hue,
+
+    @NotNull(message = "El saturation es obligatorio")
+    @Min(value = 0, message = "El saturation debe estar entre 0 y 100")
+    @Max(value = 100, message = "El saturation debe estar entre 0 y 100")
+    Integer saturation,
+
+    @NotNull(message = "El lightness es obligatorio")
+    @Min(value = 0, message = "El lightness debe estar entre 0 y 100")
+    @Max(value = 100, message = "El lightness debe estar entre 0 y 100")
+    Integer lightness,
+
+    @NotNull(message = "El colorCatalogId es obligatorio")
+    UUID colorCatalogId
+
+) {}
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/OnboardingCalibrationResponse.java
@@ -640,6 +1511,79 @@ public record InternalUserCreateRequest(
     String providerId,
     float[] initialTasteVector // Aquí inyectaremos los 1536 ceros
 ) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/ClothingDetailResponse.java
+
+package com.dressme.dressme_back.schema.dto;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Payload enriquecido para GET /wardrobe/{clothingId}.
+ *
+ * Combina tbl_clothes + tbl_clothing_ai_audit + todas sus referencias
+ * en una sola respuesta. El frontend lo usa para la vista de detalle
+ * de una prenda y para pre-poblar el formulario de edición manual.
+ *
+ * Contraste con ClothingItemResponse (para el listado general),
+ * que solo expone id, imageUrl, categoryName e isProcessed
+ * para mantener el payload del list ligero.
+ *
+ * Todos los campos del audit son nullable:
+ *   - null mientras isProcessed=false (análisis IA en curso).
+ *   - populated cuando isProcessed=true.
+ */
+public record ClothingDetailResponse(
+
+    // ── Datos de la prenda ────────────────────────────────────────────────────
+    UUID id,
+    UUID userId,
+    String imageUrl,
+    LocalDateTime createdAt,
+    boolean isProcessed,
+
+    // ── Categoría (de tbl_clothes) ────────────────────────────────────────────
+    UUID categoryId,
+    String categoryName,
+
+    // ── Datos del audit IA (de tbl_clothing_ai_audit) ─────────────────────────
+    /** null si la IA aún no procesó la prenda */
+    UUID styleId,
+    String styleName,
+
+    UUID colorId,
+    String colorName,
+    /** Hex aproximado calculado desde HSL del catálogo — útil para la UI */
+    String colorHex,
+
+    /** Valores HSL exactos detectados por Gemini Vision */
+    Integer detectedHue,
+    Integer detectedSaturation,
+    Integer detectedLightness,
+
+    UUID weatherId,
+    String weatherName,
+
+    UUID occasionId,
+    String occasionName,
+
+    /** Score de confianza del modelo [0.00 – 1.00] */
+    BigDecimal confidenceScore,
+
+    /**
+     * true si el usuario corrigió manualmente los valores de la IA.
+     * El scoring engine le da más peso a prendas corregidas por el usuario.
+     */
+    boolean wasCorrected,
+
+    /** Proveedor que hizo el análisis: "google_vision", "clarifai" */
+    String aiProvider
+
+) {}
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/schema/dto/StyleCardDTO.java
@@ -738,6 +1682,26 @@ public class AppConfig {
         private String aiUrl;
     }
 }
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-back/dressme-back/src/main/java/com/dressme/dressme_back/config/StorageProperties.java
+
+package com.dressme.dressme_back.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+import lombok.Getter;
+import lombok.Setter;
+
+@Component
+@ConfigurationProperties(prefix = "storage")
+@Getter
+@Setter
+public class StorageProperties {
+    private String path;
+    private String baseUrl;
+}
+
 
 
 === Módulo Java: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java ===
@@ -1032,6 +1996,13 @@ public class Clothing {
     @Builder.Default
     @Column(name = "is_processed")
     private boolean isProcessed = false; // Indica si la IA ya terminó el mapping
+
+    @Column(name = "embedding_vector", columnDefinition = "TEXT")
+    private String embeddingVector; // Vector de embeddings (JSON serializado o encoded)
+
+    @Builder.Default
+    @Column(name = "is_embedding_stale")
+    private boolean isEmbeddingStale = false; // true si el usuario corrigió la prenda después de vectorizar
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -1554,6 +2525,16 @@ public class ClothingAiAudit {
     @JoinColumn(name = "predicted_color_id")
     private Color predictedColor;
 
+    /** Valores HSL exactos detectados por Gemini Vision (independientes del color canónico) */
+    @Column(name = "detected_hue")
+    private Integer detectedHue;
+
+    @Column(name = "detected_saturation")
+    private Integer detectedSaturation;
+
+    @Column(name = "detected_lightness")
+    private Integer detectedLightness;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "predicted_weather_id")
     private Weather predictedWeather;
@@ -1926,6 +2907,61 @@ public interface ColorCompatibilityService {
 
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/ClothingService.java
+
+package com.dressme.dressme_database.service;
+
+import com.dressme.dressme_database.schema.dto.*;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface ClothingService {
+
+    /** Paso 1 — Registro inicial (imagen subida, isProcessed=false). */
+    ClothingItemResponse createClothing(ClothingCreateRequest request);
+
+    /** Paso 2 — Aplicar resultado del análisis Vision+Gemini. */
+    ClothingItemResponse applyAiAudit(AuditUpdateRequest request);
+
+    /**
+     * Lista resumida del guardarropa — para la vista grid del frontend.
+     * Devuelve ClothingItemResponse (ligero): id, imageUrl, category, isProcessed.
+     */
+    List<ClothingItemResponse> getWardrobeByUser(UUID userId);
+
+    /**
+     * Detalle completo de una prenda — para la vista de detalle y edición.
+     * Devuelve ClothingDetailResponse: prenda + todos los campos del audit IA.
+     * Lanza RuntimeException (→ 404) si no existe.
+     */
+    ClothingDetailResponse getClothingDetail(UUID clothingId);
+
+    /**
+     * Corrección manual de los campos predichos por la IA.
+     * Actualiza tbl_clothes (category) + tbl_clothing_ai_audit (style, color,
+     * weather, occasion) y marca was_corrected = true.
+     * Lanza RuntimeException (→ 404) si la prenda no existe o no pertenece al usuario.
+     *
+     * @return el detalle actualizado para que el frontend refleje los cambios.
+     */
+    ClothingDetailResponse updateClothing(UUID clothingId, UUID userId, ClothingUpdateRequest request);
+
+    /**
+     * Elimina la prenda y su registro de auditoría IA.
+     * La imagen en el volumen la elimina dressme-back (tiene acceso al StorageService).
+     * Lanza RuntimeException (→ 404) si no existe o no pertenece al usuario.
+     */
+    void deleteClothing(UUID clothingId, UUID userId);
+
+    /**
+     * Catálogo completo: categorías + estilos + colores + ocasiones + climas.
+     * Para dropdowns de corrección manual y filtros del guardarropa.
+     */
+    CatalogDTO getCatalog();
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/UserService.java
 
 package com.dressme.dressme_database.service;
@@ -1959,8 +2995,341 @@ public interface ColorService {
     ColorResponseDTO getComplementaryColor(UUID baseColorId);
     List<ColorResponseDTO> getAnalogousColors(UUID baseColorID);
     ColorResponseDTO getClosestColor(int hue, int saturation, int lightness);
+    
 }
 
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/ClothingServiceImpl.java
+
+package com.dressme.dressme_database.service.impl;
+
+import com.dressme.dressme_database.model.*;
+import com.dressme.dressme_database.repository.*;
+import com.dressme.dressme_database.schema.dto.*;
+import com.dressme.dressme_database.service.ClothingService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ClothingServiceImpl implements ClothingService {
+
+    private final ClothingRepository         clothingRepository;
+    private final ClothingAiAuditRepository  auditRepository;
+    private final ClothingCategoryRepository categoryRepository;
+    private final StyleRepository            styleRepository;
+    private final ColorRepository            colorRepository;
+    private final OccasionRepository         occasionRepository;
+    private final WeatherRepository          weatherRepository;
+    private final UserRepository             userRepository;
+
+    // ── Paso 1: Registro inicial ──────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public ClothingItemResponse createClothing(ClothingCreateRequest request) {
+        log.info("ClothingService: Registrando prenda para usuario {}", request.userId());
+
+        User user = userRepository.findById(request.userId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Usuario no encontrado: " + request.userId()));
+
+        Clothing clothing = Clothing.builder()
+                .user(user)
+                .imageUrl(request.imageUrl())
+                .isProcessed(false)
+                .build();
+
+        clothing = clothingRepository.save(clothing);
+        log.info("ClothingService: Prenda {} creada — pendiente de análisis IA", clothing.getId());
+        return toSummary(clothing);
+    }
+
+    // ── Paso 2: Aplicar resultado Vision+Gemini ───────────────────────────────
+
+    @Override
+    @Transactional
+    public ClothingItemResponse applyAiAudit(AuditUpdateRequest request) {
+        log.info("ClothingService: Aplicando audit IA para prenda {}", request.clothingId());
+
+        Clothing clothing = clothingRepository.findById(request.clothingId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Prenda no encontrada: " + request.clothingId()));
+
+        ClothingCategory category = categoryRepository.findById(request.predictedCategoryId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Categoría no encontrada: " + request.predictedCategoryId()));
+
+        // Actualizar la prenda
+        clothing.setCategory(category);
+        clothing.setProcessed(true);
+        clothingRepository.save(clothing);
+
+        // Crear o actualizar el registro de auditoría IA
+        ClothingAiAudit audit = auditRepository
+                .findByClothingId(clothing.getId())
+                .orElse(ClothingAiAudit.builder().clothing(clothing).build());
+
+        audit.setPredictedCategory(category);
+        audit.setConfidenceScore(request.confidenceScore());
+        audit.setAiProvider(request.aiProvider());
+        audit.setWasCorrected(false);
+
+        styleRepository.findById(request.predictedStyleId())
+                .ifPresent(audit::setPredictedStyle);
+        colorRepository.findById(request.predictedColorId())
+                .ifPresent(audit::setPredictedColor);
+
+        // Persistir valores HSL detectados exactamente por Gemini Vision
+        audit.setDetectedHue(request.detectedHue());
+        audit.setDetectedSaturation(request.detectedSaturation());
+        audit.setDetectedLightness(request.detectedLightness());
+
+        weatherRepository.findById(request.predictedWeatherId())
+                .ifPresent(audit::setPredictedWeather);
+        occasionRepository.findById(request.predictedOccasionId())
+                .ifPresent(audit::setPredictedOccasion);
+
+        auditRepository.save(audit);
+        log.info("ClothingService: Audit aplicado — prenda {} procesada", clothing.getId());
+        return toSummary(clothing);
+    }
+
+    // ── Get list (resumido) ───────────────────────────────────────────────────
+
+    @Override
+    public List<ClothingItemResponse> getWardrobeByUser(UUID userId) {
+        return clothingRepository.findByUserIdOrderByCreatedAtDesc(userId)
+                .stream()
+                .map(this::toSummary)
+                .collect(Collectors.toList());
+    }
+
+    // ── Get by ID (detalle compuesto) ─────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public ClothingDetailResponse getClothingDetail(UUID clothingId) {
+        Clothing clothing = clothingRepository.findById(clothingId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Prenda no encontrada: " + clothingId));
+
+        ClothingAiAudit audit = auditRepository
+                .findByClothingId(clothingId)
+                .orElse(null);
+
+        return toDetail(clothing, audit);
+    }
+
+    // ── Update (corrección manual) ────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public ClothingDetailResponse updateClothing(UUID clothingId, UUID userId,
+                                                  ClothingUpdateRequest request) {
+        log.info("ClothingService: Corrección manual — prenda {} por usuario {}",
+                clothingId, userId);
+
+        // Verificar ownership antes de cualquier write
+        if (!clothingRepository.existsByIdAndUserId(clothingId, userId)) {
+            throw new RuntimeException(
+                    "Prenda no encontrada o no pertenece al usuario: " + clothingId);
+        }
+
+        Clothing clothing = clothingRepository.findById(clothingId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Prenda no encontrada: " + clothingId));
+
+        // Resolver todas las referencias del catálogo
+        ClothingCategory category = categoryRepository.findById(request.categoryId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Categoría no encontrada: " + request.categoryId()));
+        Style style = styleRepository.findById(request.styleId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Estilo no encontrado: " + request.styleId()));
+        Color color = colorRepository.findById(request.colorId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Color no encontrado: " + request.colorId()));
+        Weather weather = weatherRepository.findById(request.weatherId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Clima no encontrado: " + request.weatherId()));
+        Occasion occasion = occasionRepository.findById(request.occasionId())
+                .orElseThrow(() -> new RuntimeException(
+                        "Ocasión no encontrada: " + request.occasionId()));
+
+        // Actualizar categoría en tbl_clothes
+        clothing.setCategory(category);
+        // ✦ Marcar embedding como desactualizado: el usuario corrigió la prenda
+        // después de que se vectorizó, así que el embedding es inválido.
+        // El motor de recomendación lo detectará y re-vectorizará antes de calcular outfits.
+        clothing.setEmbeddingStale(true);
+        clothingRepository.save(clothing);
+
+        // Actualizar audit — crear si aún no existe (prenda no procesada por IA
+        // pero el usuario quiere asignar manualmente)
+        ClothingAiAudit audit = auditRepository
+                .findByClothingId(clothingId)
+                .orElse(ClothingAiAudit.builder().clothing(clothing).build());
+
+        audit.setPredictedCategory(category);
+        audit.setPredictedStyle(style);
+        audit.setPredictedColor(color);
+        audit.setPredictedWeather(weather);
+        audit.setPredictedOccasion(occasion);
+        audit.setWasCorrected(true); // ← señal clave para el scoring engine
+
+        // Si no había audit previo, marcar la prenda como procesada
+        // (el usuario la caracterizó manualmente)
+        if (!clothing.isProcessed()) {
+            clothing.setProcessed(true);
+            clothingRepository.save(clothing);
+        }
+
+        auditRepository.save(audit);
+        log.info("ClothingService: Prenda {} actualizada manualmente — was_corrected=true",
+                clothingId);
+
+        return toDetail(clothing, audit);
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void deleteClothing(UUID clothingId, UUID userId) {
+        if (!clothingRepository.existsByIdAndUserId(clothingId, userId)) {
+            throw new RuntimeException(
+                    "Prenda no encontrada o no pertenece al usuario: " + clothingId);
+        }
+        auditRepository.findByClothingId(clothingId)
+                .ifPresent(auditRepository::delete);
+        clothingRepository.deleteById(clothingId);
+        log.info("ClothingService: Prenda {} eliminada", clothingId);
+    }
+
+    // ── Catálogo ──────────────────────────────────────────────────────────────
+
+    @Override
+    public CatalogDTO getCatalog() {
+        List<CatalogDTO.CategoryEntry> categories = categoryRepository
+                .findByIsActiveTrueOrderByNameAsc().stream()
+                .map(c -> new CatalogDTO.CategoryEntry(
+                        c.getId(), c.getName(),
+                        c.getParent() != null ? c.getParent().getId() : null))
+                .collect(Collectors.toList());
+
+        List<CatalogDTO.StyleEntry> styles = styleRepository
+                .findByIsActiveTrueOrderByNameAsc().stream()
+                .map(s -> new CatalogDTO.StyleEntry(s.getId(), s.getName()))
+                .collect(Collectors.toList());
+
+        List<CatalogDTO.ColorEntry> colors = colorRepository
+                .findAllByOrderByNameAsc().stream()
+                .map(c -> new CatalogDTO.ColorEntry(
+                        c.getId(), c.getName(),
+                        c.getHue(), c.getSaturation(), c.getLightness()))
+                .collect(Collectors.toList());
+
+        List<CatalogDTO.OccasionEntry> occasions = occasionRepository
+                .findByIsActiveTrueOrderByNameAsc().stream()
+                .map(o -> new CatalogDTO.OccasionEntry(o.getId(), o.getName()))
+                .collect(Collectors.toList());
+
+        List<CatalogDTO.WeatherEntry> weathers = weatherRepository
+                .findByIsActiveTrueOrderByNameAsc().stream()
+                .map(w -> new CatalogDTO.WeatherEntry(w.getId(), w.getName()))
+                .collect(Collectors.toList());
+
+        return new CatalogDTO(categories, styles, colors, occasions, weathers);
+    }
+
+    // ── Mappers privados ──────────────────────────────────────────────────────
+
+    /** Vista resumida — usada en el listado del guardarropa. */
+    private ClothingItemResponse toSummary(Clothing c) {
+        return new ClothingItemResponse(
+                c.getId(),
+                c.getUser().getId(),
+                c.getImageUrl(),
+                c.getCategory() != null ? c.getCategory().getId()   : null,
+                c.getCategory() != null ? c.getCategory().getName() : null,
+                c.isProcessed(),
+                c.getCreatedAt()
+        );
+    }
+
+    /** Vista detallada — une prenda + audit. Todos los campos del audit son nullable. */
+    private ClothingDetailResponse toDetail(Clothing c, ClothingAiAudit audit) {
+        return new ClothingDetailResponse(
+                c.getId(),
+                c.getUser().getId(),
+                c.getImageUrl(),
+                c.getCreatedAt(),
+                c.isProcessed(),
+                // Categoría (de tbl_clothes)
+                c.getCategory() != null ? c.getCategory().getId()   : null,
+                c.getCategory() != null ? c.getCategory().getName() : null,
+                // Estilo
+                audit != null && audit.getPredictedStyle()    != null ? audit.getPredictedStyle().getId()      : null,
+                audit != null && audit.getPredictedStyle()    != null ? audit.getPredictedStyle().getName()    : null,
+                // Color
+                audit != null && audit.getPredictedColor()    != null ? audit.getPredictedColor().getId()      : null,
+                audit != null && audit.getPredictedColor()    != null ? audit.getPredictedColor().getName()    : null,
+                audit != null && audit.getPredictedColor()    != null ? hslToHex(audit.getPredictedColor())    : null,
+                // Valores HSL detectados por Gemini Vision
+                audit != null ? audit.getDetectedHue()        : null,
+                audit != null ? audit.getDetectedSaturation() : null,
+                audit != null ? audit.getDetectedLightness()  : null,
+                // Clima
+                audit != null && audit.getPredictedWeather()  != null ? audit.getPredictedWeather().getId()   : null,
+                audit != null && audit.getPredictedWeather()  != null ? audit.getPredictedWeather().getName() : null,
+                // Ocasión
+                audit != null && audit.getPredictedOccasion() != null ? audit.getPredictedOccasion().getId()   : null,
+                audit != null && audit.getPredictedOccasion() != null ? audit.getPredictedOccasion().getName() : null,
+                // Audit metadata
+                audit != null ? audit.getConfidenceScore() : null,
+                audit != null && audit.isWasCorrected(),
+                audit != null ? audit.getAiProvider() : null,
+                c.isEmbeddingStale()
+        );
+    }
+
+    /**
+     * Convierte un Color (HSL del catálogo) a su representación hex aproximada.
+     * Usado en el frontend para mostrar el chip de color sin una tabla de imágenes.
+     */
+    private String hslToHex(Color color) {
+        float h = color.getHue() / 360f;
+        float s = color.getSaturation() / 100f;
+        float l = color.getLightness() / 100f;
+
+        float q = l < 0.5f ? l * (1 + s) : l + s - l * s;
+        float p = 2 * l - q;
+
+        int r = Math.round(hueToRgb(p, q, h + 1f / 3) * 255);
+        int g = Math.round(hueToRgb(p, q, h) * 255);
+        int b = Math.round(hueToRgb(p, q, h - 1f / 3) * 255);
+
+        return String.format("#%02X%02X%02X", r, g, b);
+    }
+
+    private float hueToRgb(float p, float q, float t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1f / 6)  return p + (q - p) * 6 * t;
+        if (t < 1f / 2)  return q;
+        if (t < 2f / 3)  return p + (q - p) * (2f / 3 - t) * 6;
+        return p;
+    }
+}
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/service/impl/ColorServiceImpl.java
@@ -2582,6 +3951,129 @@ public class InternalUserController {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalWardrobeController.java
+
+package com.dressme.dressme_database.controller;
+
+import com.dressme.dressme_database.schema.dto.*;
+import com.dressme.dressme_database.service.ClothingService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * CRUD completo del Wardrobe en dressme-database.
+ * Solo accesible desde la red interna Docker.
+ *
+ * Endpoints:
+ *   POST   /internal/wardrobe                      → Paso 1: registrar prenda
+ *   PATCH  /internal/wardrobe/audit                → Paso 2: audit Vision IA
+ *   GET    /internal/wardrobe/user/{userId}        → lista resumida (grid)
+ *   GET    /internal/wardrobe/{clothingId}         → detalle compuesto (view/edit)
+ *   PATCH  /internal/wardrobe/{clothingId}         → corrección manual del usuario
+ *   DELETE /internal/wardrobe/{clothingId}         → eliminar prenda
+ *   GET    /internal/wardrobe/catalog              → catálogo de filtros
+ */
+@RestController
+@RequestMapping("/internal/wardrobe")
+@RequiredArgsConstructor
+@Slf4j
+public class InternalWardrobeController {
+
+    private final ClothingService clothingService;
+
+    // ── Paso 1: Registro inicial ──────────────────────────────────────────────
+
+    @PostMapping
+    public ResponseEntity<ClothingItemResponse> createClothing(
+            @Valid @RequestBody ClothingCreateRequest request) {
+        log.info("DB-Wardrobe: POST / — usuario {}", request.userId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(clothingService.createClothing(request));
+    }
+
+    // ── Paso 2: Audit Vision ──────────────────────────────────────────────────
+
+    @PatchMapping("/audit")
+    public ResponseEntity<ClothingItemResponse> applyAiAudit(
+            @Valid @RequestBody AuditUpdateRequest request) {
+        log.info("DB-Wardrobe: PATCH /audit — prenda {}", request.clothingId());
+        return ResponseEntity.ok(clothingService.applyAiAudit(request));
+    }
+
+    // ── Lista resumida (grid del guardarropa) ─────────────────────────────────
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<ClothingItemResponse>> getWardrobe(
+            @PathVariable UUID userId) {
+        log.info("DB-Wardrobe: GET /user/{}", userId);
+        return ResponseEntity.ok(clothingService.getWardrobeByUser(userId));
+    }
+
+    // ── Detalle compuesto (vista prenda + audit) ──────────────────────────────
+
+    /**
+     * GET /internal/wardrobe/{clothingId}
+     *
+     * Devuelve ClothingDetailResponse: prenda + todos los campos del audit IA.
+     * Usado para la vista de detalle y para pre-poblar el formulario de edición.
+     *
+     * Nota: todos los campos del audit son null si isProcessed=false.
+     */
+    @GetMapping("/{clothingId}")
+    public ResponseEntity<ClothingDetailResponse> getClothingDetail(
+            @PathVariable UUID clothingId) {
+        log.info("DB-Wardrobe: GET /{}", clothingId);
+        return ResponseEntity.ok(clothingService.getClothingDetail(clothingId));
+    }
+
+    // ── Corrección manual ─────────────────────────────────────────────────────
+
+    /**
+     * PATCH /internal/wardrobe/{clothingId}?userId={userId}
+     *
+     * El usuario corrige los campos predichos por la IA.
+     * Actualiza tbl_clothes + tbl_clothing_ai_audit (was_corrected=true).
+     * Devuelve el detalle compuesto actualizado para que el frontend
+     * refleje los cambios sin necesidad de un GET adicional.
+     */
+    @PatchMapping("/{clothingId}")
+    public ResponseEntity<ClothingDetailResponse> updateClothing(
+            @PathVariable UUID clothingId,
+            @RequestParam  UUID userId,
+            @Valid @RequestBody ClothingUpdateRequest request) {
+        log.info("DB-Wardrobe: PATCH /{} — usuario {}", clothingId, userId);
+        return ResponseEntity.ok(
+                clothingService.updateClothing(clothingId, userId, request));
+    }
+
+    // ── Eliminación ───────────────────────────────────────────────────────────
+
+    @DeleteMapping("/{clothingId}")
+    public ResponseEntity<Void> deleteClothing(
+            @PathVariable UUID clothingId,
+            @RequestParam  UUID userId) {
+        log.info("DB-Wardrobe: DELETE /{} — usuario {}", clothingId, userId);
+        clothingService.deleteClothing(clothingId, userId);
+        return ResponseEntity.noContent().build(); // 204
+    }
+
+    // ── Catálogo ──────────────────────────────────────────────────────────────
+
+    @GetMapping("/catalog")
+    public ResponseEntity<CatalogDTO> getCatalog() {
+        log.info("DB-Wardrobe: GET /catalog");
+        return ResponseEntity.ok(clothingService.getCatalog());
+    }
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/controller/InternalColorController.java
 
 package com.dressme.dressme_database.controller;
@@ -2666,14 +4158,124 @@ public class InternalColorCompatibilityController {
 
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/WeatherRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.Weather;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface WeatherRepository extends JpaRepository<Weather, UUID> {
+
+    /**
+     * Condiciones climáticas activas ordenadas alfabéticamente.
+     * Usadas para poblar los filtros del frontend y el CatalogDTO.
+     */
+    List<Weather> findByIsActiveTrueOrderByNameAsc();
+
+    /**
+     * Búsqueda por nombre exacto (case-insensitive).
+     * Permite que dressme-ai resuelva la predicción al catálogo.
+     */
+    Optional<Weather> findByNameIgnoreCase(String name);
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ClothingRepository.java
 
 package com.dressme.dressme_database.repository;
 
-public class ClothingRepository {
-    
+import com.dressme.dressme_database.model.Clothing;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.UUID;
+
+@Repository
+public interface ClothingRepository extends JpaRepository<Clothing, UUID> {
+
+    /**
+     * Todas las prendas de un usuario, más recientes primero.
+     * Usado para listar el guardarropa completo.
+     */
+    List<Clothing> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    /**
+     * Prendas pendientes de análisis IA.
+     * El scheduler / worker de Vision las consume en lotes.
+     */
+    List<Clothing> findByIsProcessedFalse();
+
+    /**
+     * Prendas de un usuario filtradas por categoría.
+     * Útil cuando el frontend quiere mostrar solo "Tops", "Bottoms", etc.
+     */
+    List<Clothing> findByUserIdAndCategoryIdOrderByCreatedAtDesc(UUID userId, UUID categoryId);
+
+    /**
+     * Conteo rápido de prendas de un usuario (para stats del perfil).
+     */
+    long countByUserId(UUID userId);
+
+    /**
+     * Verifica si una prenda pertenece a un usuario concreto.
+     * Evita cargar la entidad completa solo para una verificación de ownership.
+     */
+    @Query("SELECT COUNT(c) > 0 FROM Clothing c WHERE c.id = :clothingId AND c.user.id = :userId")
+    boolean existsByIdAndUserId(@Param("clothingId") UUID clothingId, @Param("userId") UUID userId);
 }
 
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ClothingCategoryRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.ClothingCategory;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface ClothingCategoryRepository extends JpaRepository<ClothingCategory, UUID> {
+
+    /**
+     * Categorías padre activas (las que el frontend muestra como filtros de primer nivel).
+     * parent_id = NULL indica que son raíces de la jerarquía.
+     */
+    @Query("SELECT c FROM ClothingCategory c WHERE c.parent IS NULL AND c.isActive = true ORDER BY c.name ASC")
+    List<ClothingCategory> findActiveRootCategories();
+
+    /**
+     * Subcategorías activas de un padre dado.
+     * Ej: pasar el ID de "Tops" devuelve T-Shirt, Shirt, Blouse, etc.
+     */
+    List<ClothingCategory> findByParentIdAndIsActiveTrueOrderByNameAsc(UUID parentId);
+
+    /**
+     * Todas las categorías activas, planas.
+     * Usadas por dressme-ai para mapear la predicción de Vision al catálogo.
+     */
+    List<ClothingCategory> findByIsActiveTrueOrderByNameAsc();
+
+    /**
+     * Búsqueda por nombre exacto (case-insensitive).
+     * Permite que dressme-ai resuelva "T-Shirt" → entidad correcta.
+     */
+    Optional<ClothingCategory> findByNameIgnoreCase(String name);
+}
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserOnboardingSelectionRepository.java
@@ -2729,6 +4331,36 @@ public interface StyleCardRepository extends JpaRepository<StyleCard, UUID> {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/StyleRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.Style;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface StyleRepository extends JpaRepository<Style, UUID> {
+
+    /**
+     * Estilos activos ordenados alfabéticamente.
+     * Usados por el frontend para filtros y dropdowns de corrección manual.
+     */
+    List<Style> findByIsActiveTrueOrderByNameAsc();
+
+    /**
+     * Búsqueda por nombre exacto (case-insensitive).
+     * Permite que dressme-ai resuelva la predicción ("Skater", "Boho-Chic"…)
+     * a la entidad correcta del catálogo.
+     */
+    Optional<Style> findByNameIgnoreCase(String name);
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ColorCompatibilityRepository.java
 
 package com.dressme.dressme_database.repository;
@@ -2774,14 +4406,57 @@ package com.dressme.dressme_database.repository;
 
 import com.dressme.dressme_database.model.Color;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+@Repository
 public interface ColorRepository extends JpaRepository<Color, UUID> {
+
     List<Color> findByNeutralFalse();
+
+    /**
+     * Todos los colores ordenados por nombre.
+     * Usados para poblar el CatalogDTO y los dropdowns de corrección manual.
+     */
+    List<Color> findAllByOrderByNameAsc();
+
+    /**
+     * Búsqueda por nombre exacto (case-insensitive).
+     * Permite que dressme-ai resuelva el color predicho por Vision al catálogo.
+     */
+    Optional<Color> findByNameIgnoreCase(String name);
 }
 
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/ClothingAiAuditRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.ClothingAiAudit;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface ClothingAiAuditRepository extends JpaRepository<ClothingAiAudit, UUID> {
+
+    /**
+     * Busca el registro de auditoría IA asociado a una prenda específica.
+     * Relación 1:1 con Clothing, garantizada por @OneToOne unique=true en la entidad.
+     */
+    Optional<ClothingAiAudit> findByClothingId(UUID clothingId);
+
+    /**
+     * Verifica si ya existe un registro de auditoría para una prenda.
+     * Útil para decidir entre INSERT y UPDATE en el flujo de análisis.
+     */
+    boolean existsByClothingId(UUID clothingId);
+}
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/UserIdentityRepository.java
@@ -2817,6 +4492,35 @@ import java.util.UUID;
 @Repository
 public interface UserTasteProfileRepository extends JpaRepository<UserTasteProfile, UUID> {
     Optional<UserTasteProfile> findByUserId(UUID userId);
+}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/repository/OccasionRepository.java
+
+package com.dressme.dressme_database.repository;
+
+import com.dressme.dressme_database.model.Occasion;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface OccasionRepository extends JpaRepository<Occasion, UUID> {
+
+    /**
+     * Ocasiones activas ordenadas alfabéticamente.
+     * Usadas para poblar los filtros del frontend y el CatalogDTO.
+     */
+    List<Occasion> findByIsActiveTrueOrderByNameAsc();
+
+    /**
+     * Búsqueda por nombre exacto (case-insensitive).
+     * Permite que dressme-ai resuelva la predicción al catálogo.
+     */
+    Optional<Occasion> findByNameIgnoreCase(String name);
 }
 
 
@@ -2970,6 +4674,41 @@ public class UserUpdateRequest {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ClothingItemResponse.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Respuesta completa de una prenda del guardarropa.
+ *
+ * categoryId / categoryName son null cuando is_processed = false
+ * (la IA aún no terminó el análisis). El frontend debe manejar
+ * este estado mostrando un indicador de "Analizando…".
+ */
+public record ClothingItemResponse(
+
+    UUID id,
+    UUID userId,
+    String imageUrl,
+
+    /** null si la IA aún no procesó la prenda */
+    UUID categoryId,
+    String categoryName,
+
+    /**
+     * false = recién subida, pendiente de análisis Vision.
+     * true  = categoría, colores y ocasión ya asignados.
+     */
+    boolean isProcessed,
+
+    LocalDateTime createdAt
+
+) {}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserProfileResponse.java
 
 package com.dressme.dressme_database.schema.dto;
@@ -2985,6 +4724,81 @@ public record UserProfileResponse(
     String displayName,
     String profilePicture,
     boolean isCalibrated // Bandera útil para que el Frontend sepa si debe mostrar el onboarding
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/AuditUpdateRequest.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+/**
+ * Payload que envía dressme-ai (vía dressme-back) cuando termina
+ * el análisis Vision de una prenda.
+ *
+ * Paso 2 del flujo wardrobe: actualizar tbl_clothes + tbl_clothing_ai_audit.
+ *
+ * Todos los campos de predicción son obligatorios para garantizar que
+ * el motor de recomendaciones tenga datos completos con qué trabajar.
+ */
+public record AuditUpdateRequest(
+
+    /** ID de la prenda a actualizar */
+    @NotNull(message = "El clothingId es obligatorio")
+    UUID clothingId,
+
+    /** Categoría predicha por Vision (debe existir en tbl_clothing_categories) */
+    @NotNull(message = "La categoría predicha es obligatoria")
+    UUID predictedCategoryId,
+
+    /** Estilo predicho (debe existir en tbl_styles) */
+    @NotNull(message = "El estilo predicho es obligatorio")
+    UUID predictedStyleId,
+
+    /** Color dominante predicho (debe existir en tbl_colors) */
+    @NotNull(message = "El color predicho es obligatorio")
+    UUID predictedColorId,
+
+    /** Hue detectado por Gemini Vision [0-360] */
+    @NotNull(message = "El hue detectado es obligatorio")
+    Integer detectedHue,
+
+    /** Saturation detectado por Gemini Vision [0-100] */
+    @NotNull(message = "El saturation detectado es obligatorio")
+    Integer detectedSaturation,
+
+    /** Lightness detectado por Gemini Vision [0-100] */
+    @NotNull(message = "El lightness detectado es obligatorio")
+    Integer detectedLightness,
+
+    /** Condición climática predicha (debe existir en tbl_weather) */
+    @NotNull(message = "El clima predicho es obligatorio")
+    UUID predictedWeatherId,
+
+    /** Ocasión predicha (debe existir en tbl_occasions) */
+    @NotNull(message = "La ocasión predicha es obligatoria")
+    UUID predictedOccasionId,
+
+    /** Score de confianza del modelo [0.00 – 1.00] */
+    @NotNull
+    @DecimalMin(value = "0.00", message = "El confidence score debe ser >= 0")
+    @DecimalMax(value = "1.00", message = "El confidence score debe ser <= 1")
+    BigDecimal confidenceScore,
+
+    /**
+     * Nombre del proveedor IA que realizó el análisis.
+     * Valores esperados: "google_vision", "clarifai".
+     */
+    @NotBlank(message = "El aiProvider es obligatorio")
+    String aiProvider
+
 ) {}
 
 
@@ -3035,6 +4849,35 @@ public record ColorResponseDTO(
 
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/CatalogDTO.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Catálogo de referencia completo para los dropdowns de corrección manual
+ * y los filtros del frontend.
+ *
+ * Devuelto en una sola llamada para evitar 4 roundtrips separados.
+ * Incluye colores (faltaban en la versión anterior).
+ */
+public record CatalogDTO(
+    List<CategoryEntry> categories,
+    List<StyleEntry>    styles,
+    List<ColorEntry>    colors,
+    List<OccasionEntry> occasions,
+    List<WeatherEntry>  weathers
+) {
+    public record CategoryEntry(UUID id, String name, UUID parentId) {}
+    public record StyleEntry(UUID id, String name) {}
+    public record ColorEntry(UUID id, String name, Integer hue, Integer saturation, Integer lightness) {}
+    public record OccasionEntry(UUID id, String name) {}
+    public record WeatherEntry(UUID id, String name) {}
+}
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/UserResponseDTO.java
 
 package com.dressme.dressme_database.schema.dto;
@@ -3059,6 +4902,71 @@ public class UserResponseDTO {
     @JsonProperty("isCalibrated") // Forzamos el nombre exacto en el JSON
     private boolean isCalibrated; 
 }
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ClothingCreateRequest.java
+
+// ─── ClothingCreateRequest.java ──────────────────────────────────────────────
+// Paso 1 del flujo wardrobe: el usuario sube la imagen.
+// La categoría llega NULA intencionalmente; Vision la asignará en el Paso 2.
+
+package com.dressme.dressme_database.schema.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+public record ClothingCreateRequest(
+
+    @NotNull(message = "El userId es obligatorio")
+    UUID userId,
+
+    /**
+     * URL de la imagen ya almacenada en el CDN / storage externo.
+     * dressme-back sube la imagen antes de llamar a este endpoint
+     * y nos pasa la URL resultante.
+     */
+    @NotBlank(message = "La URL de imagen es obligatoria")
+    String imageUrl
+
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ClothingUpdateRequest.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+/**
+ * Payload para PATCH /wardrobe/{clothingId} — corrección manual de una prenda.
+ *
+ * El usuario puede corregir cualquier campo que la IA predijo incorrectamente.
+ * Todos los campos son obligatorios: la UI siempre envía el estado completo
+ * del formulario, no solo los campos modificados (simplifica la lógica de merge).
+ *
+ * Al persistir, ClothingServiceImpl marcará was_corrected = true en el audit,
+ * señal que el scoring engine usa para dar mayor peso a esta prenda.
+ */
+public record ClothingUpdateRequest(
+
+    @NotNull(message = "La categoría es obligatoria")
+    UUID categoryId,
+
+    @NotNull(message = "El estilo es obligatorio")
+    UUID styleId,
+
+    @NotNull(message = "El color es obligatorio")
+    UUID colorId,
+
+    @NotNull(message = "El clima es obligatorio")
+    UUID weatherId,
+
+    @NotNull(message = "La ocasión es obligatoria")
+    UUID occasionId
+
+) {}
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/InternalUserCreateRequest.java
@@ -3092,6 +5000,89 @@ public record InternalUserCreateRequest(
     @NotNull(message = "El vector de gusto inicial es obligatorio")
     @Size(min = 1536, max = 1536, message = "El vector debe tener exactamente 1536 dimensiones")
     float[] initialTasteVector
+) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-database/dressme-database/src/main/java/com/dressme/dressme_database/schema/dto/ClothingDetailResponse.java
+
+package com.dressme.dressme_database.schema.dto;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Payload enriquecido para GET /wardrobe/{clothingId}.
+ *
+ * Combina tbl_clothes + tbl_clothing_ai_audit + todas sus referencias
+ * en una sola respuesta. El frontend lo usa para la vista de detalle
+ * de una prenda y para pre-poblar el formulario de edición manual.
+ *
+ * Contraste con ClothingItemResponse (para el listado general),
+ * que solo expone id, imageUrl, categoryName e isProcessed
+ * para mantener el payload del list ligero.
+ *
+ * Todos los campos del audit son nullable:
+ *   - null mientras isProcessed=false (análisis IA en curso).
+ *   - populated cuando isProcessed=true.
+ */
+public record ClothingDetailResponse(
+
+    // ── Datos de la prenda ────────────────────────────────────────────────────
+    UUID id,
+    UUID userId,
+    String imageUrl,
+    LocalDateTime createdAt,
+    boolean isProcessed,
+
+    // ── Categoría (de tbl_clothes) ────────────────────────────────────────────
+    UUID categoryId,
+    String categoryName,
+
+    // ── Datos del audit IA (de tbl_clothing_ai_audit) ─────────────────────────
+    /** null si la IA aún no procesó la prenda */
+    UUID styleId,
+    String styleName,
+
+    UUID colorId,
+    String colorName,
+    /** Hex aproximado calculado desde HSL del catálogo — útil para la UI */
+    String colorHex,
+
+    /** Hue detectado por Gemini Vision [0-360] */
+    Integer detectedHue,
+
+    /** Saturation detectado por Gemini Vision [0-100] */
+    Integer detectedSaturation,
+
+    /** Lightness detectado por Gemini Vision [0-100] */
+    Integer detectedLightness,
+
+    UUID weatherId,
+    String weatherName,
+
+    UUID occasionId,
+    String occasionName,
+
+    /** Score de confianza del modelo [0.00 – 1.00] */
+    BigDecimal confidenceScore,
+
+    /**
+     * true si el usuario corrigió manualmente los valores de la IA.
+     * El scoring engine le da más peso a prendas corregidas por el usuario.
+     */
+    boolean wasCorrected,
+
+    /** Proveedor que hizo el análisis: "google_vision", "clarifai" */
+    String aiProvider,
+
+    /**
+     * true si el embedding_vector en tbl_clothes está desactualizado.
+     * Ocurre cuando el usuario corrige la prenda después de la vectorización IA.
+     * El motor de recomendación lo usa para saber qué prendas necesitan re-vectorizar.
+     */
+    boolean isEmbeddingStale
+
 ) {}
 
 
@@ -3309,6 +5300,199 @@ public class DressmeGatewayApplication {
 		SpringApplication.run(DressmeGatewayApplication.class, args);
 	}
 
+}
+
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/controller/WardrobeController.java
+
+package com.dressme.dressme_gateway.controller;
+
+import com.dressme.dressme_gateway.schema.dto.*;
+import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Endpoints públicos de Wardrobe (guardarropa).
+ * Recibe peticiones del frontend y las proxea a dressme-back.
+ *
+ * Rutas:
+ *   POST   /api/v1/wardrobe/upload              → subir prenda (multipart)
+ *   GET    /api/v1/wardrobe/catalog             → catálogo de filtros
+ *   GET    /api/v1/wardrobe/list?userId={uuid}  → lista resumida (grid)
+ *   GET    /api/v1/wardrobe/{clothingId}        → detalle compuesto (view/edit)
+ *   PATCH  /api/v1/wardrobe/{clothingId}        → corrección manual
+ *   DELETE /api/v1/wardrobe/{clothingId}        → eliminar prenda + imagen
+ */
+@RestController
+@RequestMapping("/api/v1/wardrobe")
+@Slf4j
+public class WardrobeController {
+
+    private final RestClient backClient;
+
+    public WardrobeController(
+            RestClient.Builder restClientBuilder,
+            @Value("${app.services.backend-url}") String backendUrl
+    ) {
+        this.backClient = restClientBuilder.baseUrl(backendUrl).build();
+    }
+
+    /**
+     * POST /api/v1/wardrobe/upload
+     *
+     * Proxea la carga de imágenes a dressme-back vía multipart/form-data.
+     * Requiere:
+     *   - userId (form part): UUID del propietario de la prenda
+     *   - image (form part): archivo de imagen (JPEG/PNG)
+     */
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ClothingItemResponse> uploadClothing(
+            @RequestPart("userId") String userIdStr,
+            @RequestPart("image") MultipartFile image) {
+
+        UUID userId = UUID.fromString(userIdStr);
+        log.info("Gateway-Wardrobe: POST /upload — usuario {}", userId);
+
+        // Construir el multipart body para proxear al backend
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("userId", userId.toString());
+        body.add("image", image.getResource());
+
+        ClothingItemResponse response = backClient.post()
+                .uri("/internal/wardrobe/upload")
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(body)
+                .retrieve()
+                .body(ClothingItemResponse.class);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    // ── Catálogo ──────────────────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/wardrobe/catalog
+     *
+     * Devuelve el catálogo completo de filtros:
+     * categorías, ocasiones, climas.
+     */
+    @GetMapping("/catalog")
+    public ResponseEntity<CatalogDTO> getCatalog() {
+        log.info("Gateway-Wardrobe: GET /catalog");
+
+        CatalogDTO catalog = backClient.get()
+                .uri("/internal/wardrobe/catalog")
+                .retrieve()
+                .body(CatalogDTO.class);
+
+        return ResponseEntity.ok(catalog);
+    }
+
+    // ── Lista resumida ───────────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/wardrobe/list?userId={userId}
+     *
+     * Devuelve lista resumida de prendas del usuario para el grid.
+     */
+    @GetMapping("/list")
+    public ResponseEntity<List<ClothingItemResponse>> getWardrobe(
+            @RequestParam UUID userId) {
+
+        log.info("Gateway-Wardrobe: GET /list para usuario {}", userId);
+
+        List<ClothingItemResponse> items = backClient.get()
+                .uri("/internal/wardrobe/user/{userId}", userId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<ClothingItemResponse>>() {});
+
+        return ResponseEntity.ok(items);
+    }
+
+    // ── Detalle compuesto ─────────────────────────────────────────────────────
+
+    /**
+     * GET /api/v1/wardrobe/{clothingId}
+     *
+     * Devuelve ClothingDetailResponse (prenda + audit completo).
+     * Todos los campos del audit son null si isProcessed=false.
+     */
+    @GetMapping("/{clothingId}")
+    public ResponseEntity<ClothingDetailResponse> getClothingDetail(
+            @PathVariable UUID clothingId) {
+
+        log.info("Gateway-Wardrobe: GET /{}", clothingId);
+
+        ClothingDetailResponse detail = backClient.get()
+                .uri("/internal/wardrobe/{clothingId}", clothingId)
+                .retrieve()
+                .body(ClothingDetailResponse.class);
+
+        return ResponseEntity.ok(detail);
+    }
+
+    // ── Corrección manual ─────────────────────────────────────────────────────
+
+    /**
+     * PATCH /api/v1/wardrobe/{clothingId}?userId={userId}
+     *
+     * El usuario corrige categoría, estilo, color, clima y ocasión.
+     * Devuelve el detalle actualizado (evita un GET adicional del frontend).
+     */
+    @PatchMapping("/{clothingId}")
+    public ResponseEntity<ClothingDetailResponse> updateClothing(
+            @PathVariable UUID clothingId,
+            @RequestParam UUID userId,
+            @Valid @RequestBody ClothingEditRequest request) {
+
+        log.info("Gateway-Wardrobe: PATCH /{} — usuario {}", clothingId, userId);
+
+        ClothingDetailResponse updated = backClient.patch()
+                .uri("/internal/wardrobe/{clothingId}?userId={userId}",
+                        clothingId, userId)
+                .body(request)
+                .retrieve()
+                .body(ClothingDetailResponse.class);
+
+        return ResponseEntity.ok(updated);
+    }
+
+    // ── Eliminación ───────────────────────────────────────────────────────────
+
+    /**
+     * DELETE /api/v1/wardrobe/{clothingId}?userId={userId}
+     *
+     * Elimina la prenda y su imagen del almacenamiento.
+     */
+    @DeleteMapping("/{clothingId}")
+    public ResponseEntity<Void> deleteClothing(
+            @PathVariable UUID clothingId,
+            @RequestParam UUID userId) {
+
+        log.info("Gateway-Wardrobe: DELETE /{} — usuario {}", clothingId, userId);
+
+        backClient.delete()
+                .uri("/internal/wardrobe/{clothingId}?userId={userId}",
+                        clothingId, userId)
+                .retrieve()
+                .toBodilessEntity();
+
+        return ResponseEntity.noContent().build(); // 204
+    }
 }
 
 
@@ -3531,6 +5715,105 @@ public class UserUpdateRequest {
 }
 
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/ClothingItemResponse.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Respuesta resumida de una prenda del guardarropa.
+ * Usada en el listado general (grid) para mantener payloads ligeros.
+ *
+ * categoryId / categoryName son null cuando isProcessed = false
+ * (la IA aún no terminó el análisis). El frontend debe manejar
+ * este estado mostrando un indicador de "Analizando…".
+ */
+public record ClothingItemResponse(
+
+    UUID id,
+    UUID userId,
+    String imageUrl,
+
+    /** null si la IA aún no procesó la prenda */
+    UUID categoryId,
+    String categoryName,
+
+    /**
+     * false = recién subida, pendiente de análisis Vision.
+     * true  = categoría, colores y ocasión ya asignados.
+     */
+    boolean isProcessed,
+
+    LocalDateTime createdAt
+
+) {}
+
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/ClothingEditRequest.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+/**
+ * Payload que el usuario envía al Gateway cuando corrige manualmente
+ * los campos de una prenda (PATCH /api/v1/wardrobe/{clothingId}).
+ *
+ * El Gateway lo proxea tal cual a dressme-back, que lo transforma
+ * internamente antes de llamar a dressme-database.
+ */
+public record ClothingEditRequest(
+
+    @NotNull(message = "La categoría es obligatoria")
+    UUID categoryId,
+
+    @NotNull(message = "El estilo es obligatorio")
+    UUID styleId,
+
+    @NotNull(message = "El color es obligatorio")
+    UUID colorId,
+
+    @NotNull(message = "El clima es obligatorio")
+    UUID weatherId,
+
+    @NotNull(message = "La ocasión es obligatoria")
+    UUID occasionId
+
+) {}
+
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/CatalogDTO.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Catálogo de referencia para poblar los filtros del frontend
+ * y los dropdowns de corrección manual de prendas.
+ *
+ * Se devuelve en una sola llamada para evitar múltiples roundtrips
+ * (categorías + ocasiones + climas).
+ */
+public record CatalogDTO(
+    List<CategoryEntry> categories,
+    List<OccasionEntry> occasions,
+    List<WeatherEntry> weathers
+) {
+
+    public record CategoryEntry(UUID id, String name, UUID parentId) {}
+    public record OccasionEntry(UUID id, String name) {}
+    public record WeatherEntry(UUID id, String name) {}
+}
+
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/UserResponseDTO.java
 
 package com.dressme.dressme_gateway.schema.dto;
@@ -3613,6 +5896,79 @@ public record GoogleUserInfoResponse(
     @JsonProperty("picture") String profilePictureUrl,
     @JsonProperty("email_verified") String emailVerified
 ) {}
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/ClothingDetailResponse.java
+
+package com.dressme.dressme_gateway.schema.dto;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Payload enriquecido para GET /api/v1/wardrobe/{clothingId}.
+ *
+ * Combina datos de la prenda + auditoría IA + todas sus referencias
+ * en una sola respuesta. El frontend lo usa para la vista de detalle
+ * de una prenda y para pre-poblar el formulario de edición manual.
+ *
+ * Contraste con ClothingItemResponse (para el listado general),
+ * que solo expone id, imageUrl, categoryName e isProcessed
+ * para mantener el payload del list ligero.
+ *
+ * Todos los campos del audit son nullable:
+ *   - null mientras isProcessed=false (análisis IA en curso).
+ *   - populated cuando isProcessed=true.
+ */
+public record ClothingDetailResponse(
+
+    // ── Datos de la prenda ────────────────────────────────────────────────────
+    UUID id,
+    UUID userId,
+    String imageUrl,
+    LocalDateTime createdAt,
+    boolean isProcessed,
+
+    // ── Categoría ─────────────────────────────────────────────────────────────
+    UUID categoryId,
+    String categoryName,
+
+    // ── Datos del audit IA ────────────────────────────────────────────────────
+    /** null si la IA aún no procesó la prenda */
+    UUID styleId,
+    String styleName,
+
+    UUID colorId,
+    String colorName,
+    /** Hex aproximado calculado desde HSL del catálogo — útil para la UI */
+    String colorHex,
+
+    /** Valores HSL exactos detectados por Gemini Vision */
+    Integer detectedHue,
+    Integer detectedSaturation,
+    Integer detectedLightness,
+
+    UUID weatherId,
+    String weatherName,
+
+    UUID occasionId,
+    String occasionName,
+
+    /** Score de confianza del modelo [0.00 – 1.00] */
+    BigDecimal confidenceScore,
+
+    /**
+     * true si el usuario corrigió manualmente los valores de la IA.
+     * El scoring engine le da más peso a prendas corregidas por el usuario.
+     */
+    boolean wasCorrected,
+
+    /** Proveedor que hizo el análisis: "google_vision", "clarifai" */
+    String aiProvider
+
+) {}
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-gateway/dressme-gateway/src/main/java/com/dressme/dressme_gateway/schema/dto/StyleCardDTO.java
@@ -3849,6 +6205,88 @@ public class AppProperties {
 
 === Módulo Python: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai ===
 
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/schemas/wardrobe.py
+
+"""
+schemas/wardrobe.py
+────────────────────
+Modelos de datos del flujo wardrobe.
+
+Todos los contratos de datos que cruzan capas viven aquí:
+  - Lo que entra y sale del router  (VisionAnalysisRequest / Response)
+  - Lo que los servicios comparten  (CatalogData)
+  - Estructuras internas del dominio (DetectedColorHSL)
+
+"""
+
+from dataclasses import dataclass, field
+from decimal import Decimal
+from uuid import UUID
+from pydantic import BaseModel, Field
+
+
+# ── Catálogo de referencia ────────────────────────────────────────────────────
+# Compartido entre CatalogClient (lo produce) y WardrobeAnalysisService
+# (lo consume). Ambos lo importan desde aquí.
+
+@dataclass
+class CatalogData:
+    """
+    Catálogo activo de dressme cacheado en memoria.
+    Producido por CatalogClient, consumido por WardrobeAnalysisService.
+    """
+    categories: list[dict]
+    styles:     list[dict]
+    colors:     list[dict]
+    weathers:   list[dict]
+    occasions:  list[dict]
+    fetched_at: float = field(default_factory=__import__("time").time)
+
+    def is_expired(self, ttl_seconds: int = 600) -> bool:
+        import time
+        return (time.time() - self.fetched_at) > ttl_seconds
+
+
+# ── Request / Response del endpoint ──────────────────────────────────────────
+
+class VisionAnalysisRequest(BaseModel):
+    """
+    Payload que recibe POST /ai/wardrobe/analyze desde dressme-back.
+    """
+    clothing_id: UUID
+    image_url:   str = Field(..., description="URL interna accesible desde la red Docker")
+
+
+class DetectedColorHSL(BaseModel):
+    """
+    Color dominante de la prenda detectado por Gemini Vision.
+
+    hue/saturation/lightness → valores exactos para el scoring engine
+                               (armonía cromática: complementarios, análogos, triádicos)
+    color_catalog_id         → UUID del color canónico más cercano del catálogo
+                               (para la UI: chip de color, filtros del guardarropa)
+    """
+    hue:              int = Field(..., ge=0,   le=360)
+    saturation:       int = Field(..., ge=0,   le=100)
+    lightness:        int = Field(..., ge=0,   le=100)
+    color_catalog_id: UUID
+
+
+class VisionAnalysisResponse(BaseModel):
+    """
+    Respuesta de dressme-ai hacia dressme-back.
+    dressme-back la descompone en AuditUpdateRequest para persistir en dressme-database.
+    """
+    clothing_id:           UUID
+    predicted_category_id: UUID
+    predicted_style_id:    UUID
+    predicted_weather_id:  UUID
+    predicted_occasion_id: UUID
+    detected_color_hsl:    DetectedColorHSL
+    confidence_score:      Decimal = Field(..., ge=Decimal("0.00"), le=Decimal("1.00"))
+    ai_provider:           str = Field(default="gemini_vision")
+
+
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/schemas/__init__.py
 
 """schemas"""
@@ -3981,44 +6419,75 @@ Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/settings/_
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/settings/dependencies.py
 
 """
-dependencies.py
-───────────────
-Inyección de dependencias para FastAPI.
+settings/dependencies.py
+─────────────────────────
+Único punto de ensamblado de la aplicación.
 
-Define cómo se construyen los objetos que los routers necesitan.
+Principio fundamental:
+  Solo dependencies.py conoce todas las implementaciones concretas
+  y decide cómo conectarlas. Los servicios solo conocen protocolos.
 
-FastAPI usa el patrón Depends() para inyección. Cuando un endpoint
-declara `service: TasteVectorService = Depends(get_taste_vector_service)`,
-FastAPI llama a get_taste_vector_service() y pasa el resultado al endpoint.
+Flujo de construcción al arrancar:
+  get_catalog_client()              → instancia CatalogClient (implementación concreta)
+  get_wardrobe_analysis_service()   → inyecta CatalogClient como CatalogProvider
+                                      WardrobeAnalysisService recibe el protocolo,
+                                      nunca la clase concreta.
 
-El EmbeddingService se construye una sola vez al arrancar
-(patrón singleton implícito con lru_cache) para no reconfigurar
-el cliente de Gemini en cada request.
+Patrón singleton via lru_cache:
+  Igual que get_embedding_service():
+  los servicios con estado externo (conexiones, clientes de API) se crean
+  una sola vez durante la vida del proceso.
 """
 
 from functools import lru_cache
+
 from settings.config import get_settings
 from services.taste_vector_service import TasteVectorService
 from services.embedding_service import EmbeddingService
+from services.catalog_client import CatalogClient
+from services.wardrobe import WardrobeAnalysisService
+
 
 
 def get_taste_vector_service() -> TasteVectorService:
-    """
-    TasteVectorService no depende de ninguna API externa (solo usa numpy),
-    así que no necesita credenciales. Se puede instanciar limpiamente.
-    """
     return TasteVectorService()
 
 
 @lru_cache(maxsize=1)
 def get_embedding_service() -> EmbeddingService:
-    """
-    EmbeddingService necesita la Gemini API key.
-    lru_cache garantiza que genai.configure() solo se llama una vez
-    durante la vida del proceso, no en cada request.
-    """
     settings = get_settings()
     return EmbeddingService(api_key=settings.gemini_api_key)
+
+
+# ── Wardrobe ──────────────────────────────────────────────────────────────────
+
+@lru_cache(maxsize=1)
+def get_catalog_client() -> CatalogClient:
+    """
+    Instancia la implementación concreta del CatalogProvider.
+    Solo dependencies.py sabe que existe CatalogClient.
+    WardrobeAnalysisService lo recibe como CatalogProvider (protocolo).
+    """
+    settings = get_settings()
+    return CatalogClient(database_url=settings.database_service_url)
+
+
+@lru_cache(maxsize=1)
+def get_wardrobe_analysis_service() -> WardrobeAnalysisService:
+    """
+    Ensambla WardrobeAnalysisService inyectando:
+      - api_key: str           → desde settings (misma key que EmbeddingService)
+      - catalog: CatalogProvider → la implementación CatalogClient
+
+    Si en el futuro el catálogo viene de Redis, solo hay que cambiar
+    get_catalog_client() para devolver RedisCatalogClient.
+    WardrobeAnalysisService no se toca.
+    """
+    settings = get_settings()
+    return WardrobeAnalysisService(
+        api_key=settings.gemini_api_key,
+        catalog=get_catalog_client(),   # inyectado como CatalogProvider
+    )
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/settings/config.py
@@ -4043,33 +6512,100 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
  
  
 class Settings(BaseSettings):
-    # ── Google Gemini ─────────────────────────────────────────────────────────
-    # Default vacío: el servicio arranca sin la key. Solo es requerida al
-    # correr seed_embeddings.py o al analizar prendas (Fase 5+).
-    # El lifespan de main.py emite un WARNING si no está configurada.
+ 
+    # ── Google Gemini (embeddings + Gemini Vision para prendas) ──────────────
+    # Una sola API key cubre:
+    #   - gemini-embedding-001  (onboarding: style card embeddings)
+    #   - gemini-1.5-flash      (wardrobe: análisis visual de prendas)
     gemini_api_key: str = ""
  
+    # ── dressme-database (catálogo de referencia para el mapeo) ───────────────
+    # CatalogClient llama a GET /internal/wardrobe/catalog antes de cada
+    # análisis (con caché en memoria de 10 min).
+    database_service_url: str = "http://dressme-database:8080"
+ 
     # ── Servicio ──────────────────────────────────────────────────────────────
-    app_name: str = "dressme-ai"
-    app_env: str = "development"     # "development" | "production"
+    app_name:  str = "dressme-ai"
+    app_env:   str = "development"
     log_level: str = "INFO"
  
-    # ── Pydantic Settings config ───────────────────────────────────────────────
     model_config = SettingsConfigDict(
-        env_file=".env",             # Lee el .env si existe (útil en local)
+        env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,        # GEMINI_API_KEY == gemini_api_key
-        extra="ignore",              # Variables de entorno extra no causan error
+        case_sensitive=False,
+        extra="ignore",
     )
  
  
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """
-    Singleton de configuración.
-    lru_cache garantiza que el .env solo se lee una vez al arrancar.
-    """
     return Settings()
+ 
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/routers/wardrobe.py
+
+import logging
+from fastapi import APIRouter, Depends, status
+
+from schemas.wardrobe import VisionAnalysisRequest, VisionAnalysisResponse
+from services.wardrobe import WardrobeAnalysisService
+from settings.dependencies import get_wardrobe_analysis_service
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/ai/wardrobe",
+    tags=["Wardrobe AI"],
+)
+
+
+@router.post(
+    "/analyze",
+    response_model=VisionAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Analizar prenda con Gemini Vision",
+    description="""
+    Recibe el ID de la prenda y la URL interna de su imagen.
+    Gemini Vision analiza la imagen en un solo paso y devuelve:
+
+    - **Categoría, estilo, clima y ocasión**: UUIDs del catálogo activo de dressme.
+    - **Color detectado**: UUID del color más cercano del catálogo +
+      valores HSL exactos del color dominante de la prenda.
+    - **confidence_score**: confianza de Gemini en el análisis [0.00–1.00].
+
+    Los valores HSL permiten al scoring engine calcular armonía cromática real
+    entre prendas (complementarios, análogos, triádicos) en lugar de comparar
+    solo UUIDs de color.
+
+    **Fallback:** si Gemini no puede clasificar la imagen, la prenda se asigna
+    a "Uncategorized" con confidence_score=0.0. El usuario puede corregirla manualmente.
+
+    Consumido exclusivamente por **dressme-back** (red interna Docker).
+    """,
+)
+def analyze_clothing(
+    request: VisionAnalysisRequest,
+    service: WardrobeAnalysisService = Depends(get_wardrobe_analysis_service),
+) -> VisionAnalysisResponse:
+    logger.info(
+        "Router: POST /ai/wardrobe/analyze — prenda=%s", request.clothing_id
+    )
+
+    result = service.analyze(request)
+
+    logger.info(
+        "Router: Análisis completado — prenda=%s, categoría=%s, "
+        "color=HSL(%d,%d,%d), confidence=%.4f",
+        request.clothing_id,
+        result.predicted_category_id,
+        result.detected_color_hsl.hue,
+        result.detected_color_hsl.saturation,
+        result.detected_color_hsl.lightness,
+        result.confidence_score,
+    )
+
+    return result
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/routers/__init__.py
@@ -4080,10 +6616,10 @@ routers
 Módulo que agrupa todos los routers de la aplicación FastAPI.
 """
 
-from routers.onboarding import router as onboarding_router
+from routers.onboarding import router as onboarding
+from routers.wardrobe   import router as wardrobe
 
-__all__ = ["onboarding_router"]
-
+__all__ = ["onboarding", "wardrobe"]
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/routers/onboarding.py
@@ -4179,61 +6715,6 @@ def generate_embeddings(
     return result
 
 
-Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/routers/onboarding_router.py
-
-"""
-onboarding_router.py
-─────────────────────
-Router para el flujo de onboarding.
-
-Expone endpoints para:
-- Procesar las selecciones de estilo del usuario
-- Generar y calcular el taste vector
-"""
-
-from fastapi import APIRouter, HTTPException
-from pydantic import ValidationError
-
-from schemas.onboarding import ComputeTasteVectorRequest, ComputeTasteVectorResponse
-from services.taste_vector_service import TasteVectorService
-
-router = APIRouter(
-    prefix="/api/v1/onboarding",
-    tags=["Onboarding"],
-)
-
-taste_vector_service = TasteVectorService()
-
-
-@router.post("/compute-taste-vector", response_model=ComputeTasteVectorResponse)
-def compute_taste_vector(request: ComputeTasteVectorRequest) -> ComputeTasteVectorResponse:
-    """
-    Calcula el taste vector del usuario basado en sus selecciones de onboarding.
-
-    **Request:**
-    - `user_id`: ID del usuario
-    - `selections`: Lista de tarjetas con embedding y reacción (LIKE/DISLIKE/SKIP)
-
-    **Response:**
-    - `user_id`: ID del usuario
-    - `taste_vector`: Vector de 1536 dimensiones (embedding del taste)
-    - `cards_used`: Cantidad de tarjetas procesadas
-    - `likes_count`: Cantidad de selecciones LIKE
-    - `dislikes_count`: Cantidad de selecciones DISLIKE
-    """
-    try:
-        taste_vector_result = taste_vector_service.compute(request)
-        return taste_vector_result
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=f"Validación fallida: {str(e)}")
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al calcular taste vector: {str(e)}",
-        )
-
-
-
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/main.py
 
 import logging
@@ -4242,7 +6723,7 @@ from fastapi import FastAPI
 
 from settings.config import get_settings
 from infra.error_handler import register_error_handlers
-from routers import onboarding_router
+from routers import onboarding, wardrobe
 
 
 # ── Configuración de logging ──────────────────────────────────────────────────
@@ -4265,16 +6746,21 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("══════════════════════════════════════════")
     logger.info("  %s arrancando en modo: %s", settings.app_name, settings.app_env)
+
     if settings.gemini_api_key:
-        logger.info("  Gemini API Key configurada: OK")
+        logger.info("  Gemini API Key (embeddings + Vision) : OK")
     else:
         logger.warning(
             "  Gemini API Key NO configurada — "
-            "los endpoints de embeddings fallarán si se invocan. "
-            "Agrega GEMINI_API_KEY al .env cuando estés listo."
+            "los endpoints de embeddings y análisis de prendas fallarán. "
+            "Agrega GEMINI_API_KEY al .env."
         )
+
+    logger.info("  Database service URL                 : %s", settings.database_service_url)
     logger.info("══════════════════════════════════════════")
+
     yield
+
     logger.info("%s apagándose correctamente.", settings.app_name)
 
 
@@ -4283,14 +6769,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Dressme AI Service",
     description="""
-    Motor de inteligencia artificial de Dressme.
+Motor de inteligencia artificial de Dressme.
 
-    Responsabilidades en el MVP:
-    - **Generar embeddings** de style cards usando Google Gemini gemini-embedding-001
-    - **Calcular el taste vector** del usuario a partir de sus selecciones de onboarding
+**Responsabilidades en el MVP:**
+- **Onboarding:** generar embeddings de style cards y calcular el taste vector del usuario.
+- **Wardrobe:** analizar prendas con Gemini Vision, mapear al catálogo y extraer HSL del color dominante.
 
-    Consumido exclusivamente por **dressme-back** en la red interna Docker.
-    No está expuesto públicamente a través del Gateway.
+Consumido exclusivamente por **dressme-back** en la red interna Docker.
+No está expuesto públicamente a través del Gateway.
     """,
     version="1.0.0",
     lifespan=lifespan,
@@ -4298,24 +6784,245 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ── Registro de error handlers ────────────────────────────────────────────────
 register_error_handlers(app)
 
-# ── Registro de routers ───────────────────────────────────────────────────────
-app.include_router(onboarding_router)
+app.include_router(onboarding)
+app.include_router(wardrobe)
 
-logger.info("Routers registrados: /ai/onboarding/generate-embeddings, /ai/onboarding/compute-taste-vector")
+logger.info(
+    "Routers registrados: "
+    "/ai/onboarding/generate-embeddings, "
+    "/ai/onboarding/compute-taste-vector, "
+    "/ai/wardrobe/analyze"
+)
 
-
-# ── Health check ─────────────────────────────────────────────────────────────
 
 @app.get("/", tags=["Health"])
 def health_check():
     return {
         "service": settings.app_name,
-        "status": "active",
-        "env": settings.app_env,
+        "status":  "active",
+        "env":     settings.app_env,
     }
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/services/wardrobe.py
+
+"""
+services/wardrobe_service.py
+─────────────────────────────
+Orquestador del análisis de prendas usando Gemini Vision.
+
+Importaciones:
+  - schemas.wardrobe  → CatalogData, VisionAnalysisRequest/Response, DetectedColorHSL
+"""
+
+import json
+import logging
+import re
+from decimal import Decimal
+from uuid import UUID
+
+import google.generativeai as genai
+
+from schemas.wardrobe import (
+    CatalogData,
+    VisionAnalysisRequest,
+    VisionAnalysisResponse,
+    DetectedColorHSL,
+)
+from services.catalog_provider import CatalogProvider
+
+logger = logging.getLogger(__name__)
+
+GEMINI_VISION_MODEL = "gemini-1.5-flash"
+
+
+class WardrobeAnalysisService:
+    """
+    Analiza imágenes de prendas con Gemini Vision y mapea el resultado
+    al catálogo de dressme en una sola llamada a la API.
+
+    Constructor:
+      api_key  → str,             inyectado desde settings via dependencies.py
+      catalog  → CatalogProvider, inyectado via dependencies.py
+                 (WardrobeAnalysisService no sabe qué implementación es)
+    """
+
+    def __init__(self, api_key: str, catalog: CatalogProvider):
+        genai.configure(api_key=api_key)
+        self._model   = genai.GenerativeModel(GEMINI_VISION_MODEL)
+        self._catalog = catalog
+        logger.info("WardrobeAnalysisService: Inicializado con modelo %s", GEMINI_VISION_MODEL)
+
+    def analyze(self, request: VisionAnalysisRequest) -> VisionAnalysisResponse:
+        """
+        Analiza la prenda y devuelve su clasificación completa.
+
+        Fallback: si Gemini falla, la prenda se asigna a "Uncategorized"
+        con confidence_score=0.0. El usuario puede corregirla manualmente.
+        """
+        logger.info(
+            "WardrobeAnalysisService: Analizando prenda %s — url=%s",
+            request.clothing_id, request.image_url,
+        )
+        catalog = self._catalog.get_catalog()
+
+        try:
+            raw  = self._call_gemini(request.image_url, catalog)
+            data = self._parse_response(raw)
+            return self._build_response(request.clothing_id, data)
+        except Exception as e:
+            logger.error(
+                "WardrobeAnalysisService: Error analizando prenda %s: %s. "
+                "Aplicando fallback a 'Uncategorized'.",
+                request.clothing_id, e,
+            )
+            return self._build_uncategorized_response(request.clothing_id, catalog)
+
+    # ── Gemini Vision ─────────────────────────────────────────────────────────
+
+    def _call_gemini(self, image_url: str, catalog: CatalogData) -> str:
+        response = self._model.generate_content(
+            contents=[{
+                "parts": [
+                    {"text": self._build_prompt(catalog)},
+                    {"file_data": {"mime_type": "image/jpeg", "file_uri": image_url}},
+                ]
+            }]
+        )
+        return response.text
+
+    def _build_prompt(self, catalog: CatalogData) -> str:
+        def fmt(entries: list[dict]) -> str:
+            return "\n".join(
+                f'  {{"id": "{e["id"]}", "name": "{e["name"]}"}}'
+                for e in entries
+            )
+
+        return f"""You are a professional fashion analyst for a clothing recommendation app.
+
+Analyze the clothing item visible in the image and return a JSON classification.
+
+INSTRUCTIONS:
+1. Identify the main clothing item (ignore backgrounds, models, accessories).
+2. Detect the dominant color of the garment and convert it to HSL values.
+3. Select the best matching entry from EACH catalog list below.
+4. You MUST use the exact "id" values from the lists — never invent IDs.
+5. Respond ONLY with the JSON object. No markdown, no explanation.
+
+CATALOG — CATEGORIES:
+{fmt(catalog.categories)}
+
+CATALOG — STYLES:
+{fmt(catalog.styles)}
+
+CATALOG — COLORS (choose the closest match to the detected color):
+{fmt(catalog.colors)}
+
+CATALOG — WEATHER (most suitable condition for this garment):
+{fmt(catalog.weathers)}
+
+CATALOG — OCCASIONS (most suitable occasion):
+{fmt(catalog.occasions)}
+
+REQUIRED JSON FORMAT:
+{{
+  "category_id":  "<uuid from CATEGORIES>",
+  "style_id":     "<uuid from STYLES>",
+  "weather_id":   "<uuid from WEATHER>",
+  "occasion_id":  "<uuid from OCCASIONS>",
+  "color": {{
+    "catalog_id": "<uuid from COLORS>",
+    "hue":        <integer 0-360>,
+    "saturation": <integer 0-100>,
+    "lightness":  <integer 0-100>
+  }},
+  "confidence": <float 0.0-1.0>
+}}"""
+
+    # ── Parseo ────────────────────────────────────────────────────────────────
+
+    def _parse_response(self, raw_text: str) -> dict:
+        cleaned = re.sub(r"```(?:json)?", "", raw_text).strip()
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Gemini no devolvió JSON válido. Raw: {raw_text!r}. Error: {e}") from e
+
+        required_root  = {"category_id", "style_id", "weather_id", "occasion_id", "color", "confidence"}
+        required_color = {"catalog_id", "hue", "saturation", "lightness"}
+
+        if missing := required_root - set(data.keys()):
+            raise ValueError(f"Gemini omitió claves: {missing}")
+        if missing_color := required_color - set(data["color"].keys()):
+            raise ValueError(f"Gemini omitió campos del color: {missing_color}")
+
+        for key in ("category_id", "style_id", "weather_id", "occasion_id"):
+            try:    
+                UUID(str(data[key]))
+            except ValueError:
+                raise ValueError(f"'{data[key]}' para '{key}' no es un UUID válido.")
+
+        try:    
+            UUID(str(data["color"]["catalog_id"]))
+        except ValueError:
+            raise ValueError(f"'{data['color']['catalog_id']}' no es UUID válido para color.catalog_id.")
+
+        c = data["color"]
+        if not (0 <= int(c["hue"])        <= 360): 
+            raise ValueError(f"Hue fuera de rango: {c['hue']}")
+        if not (0 <= int(c["saturation"]) <= 100): 
+            raise ValueError(f"Saturation fuera de rango: {c['saturation']}")
+        if not (0 <= int(c["lightness"])  <= 100): 
+            raise ValueError(f"Lightness fuera de rango: {c['lightness']}")
+
+        return data
+
+    # ── Builders ──────────────────────────────────────────────────────────────
+
+    def _build_response(self, clothing_id: UUID, data: dict) -> VisionAnalysisResponse:
+        c = data["color"]
+        return VisionAnalysisResponse(
+            clothing_id=clothing_id,
+            predicted_category_id=UUID(data["category_id"]),
+            predicted_style_id=UUID(data["style_id"]),
+            predicted_weather_id=UUID(data["weather_id"]),
+            predicted_occasion_id=UUID(data["occasion_id"]),
+            detected_color_hsl=DetectedColorHSL(
+                hue=int(c["hue"]),
+                saturation=int(c["saturation"]),
+                lightness=int(c["lightness"]),
+                color_catalog_id=UUID(c["catalog_id"]),
+            ),
+            confidence_score=Decimal(str(round(float(data["confidence"]), 4))),
+            ai_provider="gemini_vision",
+        )
+
+    def _build_uncategorized_response(
+        self, clothing_id: UUID, catalog: CatalogData
+    ) -> VisionAnalysisResponse:
+        def first(entries: list[dict]) -> UUID:
+            if not entries:
+                raise RuntimeError("Catálogo vacío. Verifica el seed de dressme-database.")
+            return UUID(entries[0]["id"])
+
+        uncategorized = next(
+            (c for c in catalog.categories if c["name"].lower() == "uncategorized"), None
+        )
+        return VisionAnalysisResponse(
+            clothing_id=clothing_id,
+            predicted_category_id=UUID(uncategorized["id"]) if uncategorized else first(catalog.categories),
+            predicted_style_id=first(catalog.styles),
+            predicted_weather_id=first(catalog.weathers),
+            predicted_occasion_id=first(catalog.occasions),
+            detected_color_hsl=DetectedColorHSL(
+                hue=0, saturation=0, lightness=50,
+                color_catalog_id=first(catalog.colors),
+            ),
+            confidence_score=Decimal("0.0"),
+            ai_provider="gemini_vision",
+        )
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/services/__init__.py
@@ -4543,6 +7250,111 @@ class EmbeddingService:
             model_used=EMBEDDING_MODEL,
             total_processed=len(results),
         )
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/services/catalog_client.py
+
+"""
+services/catalog_client.py
+───────────────────────────
+Cliente HTTP que obtiene el catálogo activo de dressme-database.
+
+Importaciones:
+  - CatalogData viene de schemas.wardrobe (capa de datos compartidos).
+  - Solo dependencies.py sabe que este servicio existe.
+"""
+
+import logging
+import httpx
+
+from schemas.wardrobe import CatalogData
+
+logger = logging.getLogger(__name__)
+
+
+class CatalogClient:
+    """
+    Obtiene y cachea el catálogo desde dressme-database.
+    Instanciado como singleton en dependencies.py via lru_cache.
+    """
+
+    def __init__(self, database_url: str):
+        self._database_url = database_url.rstrip("/")
+        self._cache: CatalogData | None = None
+
+    def get_catalog(self) -> CatalogData:
+        """Devuelve el catálogo, refrescándolo si el TTL (10 min) expiró."""
+        if self._cache is None or self._cache.is_expired():
+            logger.info("CatalogClient: Refrescando catálogo desde dressme-database")
+            self._cache = self._fetch_catalog()
+            logger.info(
+                "CatalogClient: Catálogo cargado — "
+                "%d categorías, %d estilos, %d colores, %d climas, %d ocasiones",
+                len(self._cache.categories), len(self._cache.styles),
+                len(self._cache.colors),     len(self._cache.weathers),
+                len(self._cache.occasions),
+            )
+        return self._cache
+
+    def _fetch_catalog(self) -> CatalogData:
+        url = f"{self._database_url}/internal/wardrobe/catalog"
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url)
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise RuntimeError(
+                f"dressme-database rechazó la solicitud de catálogo "
+                f"({e.response.status_code}): {e.response.text}"
+            ) from e
+        except httpx.RequestError as e:
+            raise RuntimeError(
+                f"No se pudo conectar a dressme-database para el catálogo: {e}"
+            ) from e
+
+        data = response.json()
+        return CatalogData(
+            categories=[{"id": c["id"], "name": c["name"]} for c in data.get("categories", [])],
+            styles    =[{"id": s["id"], "name": s["name"]} for s in data.get("styles",     [])],
+            colors    =[{"id": c["id"], "name": c["name"]} for c in data.get("colors",     [])],
+            weathers  =[{"id": w["id"], "name": w["name"]} for w in data.get("weathers",   [])],
+            occasions =[{"id": o["id"], "name": o["name"]} for o in data.get("occasions",  [])],
+        )
+
+    def invalidate_cache(self) -> None:
+        """Invalida el caché manualmente. Útil para tests."""
+        self._cache = None
+        logger.info("CatalogClient: Caché invalidado")
+
+
+Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/services/catalog_provider.py
+
+"""
+services/catalog_provider.py
+─────────────────────────────
+Protocolo abstracto para proveedores de catálogo.
+
+Solo esta interfaz es visible para los servicios.
+La implementación concreta (CatalogClient) es privada de dependencies.py.
+"""
+
+from typing import Protocol
+
+from schemas.wardrobe import CatalogData
+
+
+class CatalogProvider(Protocol):
+    """
+    Protocolo que define el contrato para cualquier proveedor de catálogo.
+    
+    Permite que WardrobeAnalysisService NO conozca la implementación concreta.
+    dependencies.py inyecta la implementación (CatalogClient u otra).
+    """
+
+    def get_catalog(self) -> CatalogData:
+        """Devuelve el catálogo actual, aplicando caché si aplica."""
+        ...
+
 
 
 Archivo: /home/alejo/Documents/Semestre_2026_1/dressme-app/dressme-ai/scripts/seed_embeddings.py
@@ -4885,6 +7697,9 @@ pydantic-settings==2.2.1     # Para leer variables de entorno con BaseSettings
 # ── IA y cálculo vectorial ─────────────────────────────────────────────────────
 google-generativeai==0.8.3   
 numpy==1.26.4
+
+# ── HTTP cliente (CatalogClient → dressme-database) ───────────────────────────
+httpx==0.27.0
 
 # ── Utilidades ─────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1

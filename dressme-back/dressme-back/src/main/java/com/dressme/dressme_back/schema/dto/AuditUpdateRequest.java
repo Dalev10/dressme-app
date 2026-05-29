@@ -1,5 +1,6 @@
 package com.dressme.dressme_back.schema.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -9,8 +10,12 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * Payload que envía dressme-ai cuando termina
+ * Payload que envía el orquestador a dressme-database cuando termina
  * el análisis Vision de una prenda.
+ *
+ * Estructura APLANADA: los valores HSL del color detectado se envían como
+ * campos individuales (detectedHue, detectedSaturation, detectedLightness)
+ * en lugar de un objeto anidado, para coincidir con dressme-database.
  *
  * Paso 2 del flujo wardrobe: actualizar tbl_clothes + tbl_clothing_ai_audit.
  *
@@ -35,6 +40,18 @@ public record AuditUpdateRequest(
     @NotNull(message = "El color predicho es obligatorio")
     UUID predictedColorId,
 
+    /** Hue detectado por Gemini Vision [0-360] */
+    @NotNull(message = "El hue detectado es obligatorio")
+    Integer detectedHue,
+
+    /** Saturation detectado por Gemini Vision [0-100] */
+    @NotNull(message = "El saturation detectado es obligatorio")
+    Integer detectedSaturation,
+
+    /** Lightness detectado por Gemini Vision [0-100] */
+    @NotNull(message = "El lightness detectado es obligatorio")
+    Integer detectedLightness,
+
     /** Condición climática predicha (debe existir en tbl_weather) */
     @NotNull(message = "El clima predicho es obligatorio")
     UUID predictedWeatherId,
@@ -51,7 +68,7 @@ public record AuditUpdateRequest(
 
     /**
      * Nombre del proveedor IA que realizó el análisis.
-     * Valores esperados: "google_vision", "clarifai".
+     * Valores esperados: "gemini_vision".
      */
     @NotBlank(message = "El aiProvider es obligatorio")
     String aiProvider
