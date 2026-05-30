@@ -48,4 +48,6 @@ public interface ClothingService {
      * Para dropdowns de corrección manual y filtros del guardarropa.
      */
     CatalogDTO getCatalog();
+
+    WardrobeEditCatalogDTO getEditCatalog();
 }

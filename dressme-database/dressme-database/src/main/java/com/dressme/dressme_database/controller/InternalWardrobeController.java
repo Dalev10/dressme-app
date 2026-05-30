@@ -122,4 +122,15 @@ public class InternalWardrobeController {
         log.info("DB-Wardrobe: GET /catalog");
         return ResponseEntity.ok(clothingService.getCatalog());
     }
+
+
+    @GetMapping("/catalog/edit")
+    public ResponseEntity<WardrobeEditCatalogDTO> getEditCatalog() {
+
+        log.info("DB-Wardrobe: GET /catalog/edit");
+
+        return ResponseEntity.ok(
+                clothingService.getEditCatalog()
+        );
+    }
 }

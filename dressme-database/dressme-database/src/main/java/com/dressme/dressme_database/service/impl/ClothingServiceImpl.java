@@ -1,5 +1,6 @@
 package com.dressme.dressme_database.service.impl;
 
+import com.dressme.dressme_database.exception.CategoryTypeMismatchException;
 import com.dressme.dressme_database.model.*;
 import com.dressme.dressme_database.repository.*;
 import com.dressme.dressme_database.schema.dto.*;
@@ -129,10 +130,16 @@ public class ClothingServiceImpl implements ClothingService {
 
     @Override
     @Transactional
-    public ClothingDetailResponse updateClothing(UUID clothingId, UUID userId,
-                                                  ClothingUpdateRequest request) {
-        log.info("ClothingService: Corrección manual — prenda {} por usuario {}",
-                clothingId, userId);
+    public ClothingDetailResponse updateClothing(
+                UUID clothingId, 
+                UUID userId,
+                ClothingUpdateRequest request) {
+        
+        log.info(
+                "ClothingService: Corrección manual — prenda {} por usuario {}",
+                clothingId, 
+                userId
+        );
 
         // Verificar ownership antes de cualquier write
         if (!clothingRepository.existsByIdAndUserId(clothingId, userId)) {
@@ -144,22 +151,35 @@ public class ClothingServiceImpl implements ClothingService {
                 .orElseThrow(() -> new RuntimeException(
                         "Prenda no encontrada: " + clothingId));
 
-        // Resolver todas las referencias del catálogo
-        ClothingCategory category = categoryRepository.findById(request.categoryId())
+        ClothingCategory type = categoryRepository.findById(request.typeId())
                 .orElseThrow(() -> new RuntimeException(
-                        "Categoría no encontrada: " + request.categoryId()));
+                        "Tipo no encontrado: " + request.typeId()));
+
+        if (type.getParent() != null) {
+            throw new CategoryTypeMismatchException(
+                    "El ID de tipo " 
+                        + request.typeId() 
+                        + " no corresponde a una categoría raíz"
+                );
+        }
+
+        ClothingCategory category = 
+                categoryRepository.findByIdAndParentIdAndIsActiveTrue(
+                        request.categoryId(), 
+                        request.typeId()
+                )
+                .orElseThrow(() ->
+                        new CategoryTypeMismatchException(
+                                "La categoria" 
+                                + request.categoryId() 
+                                + " no pertenece al tipo" 
+                                + request.typeId()
+                        ));
+
         Style style = styleRepository.findById(request.styleId())
                 .orElseThrow(() -> new RuntimeException(
                         "Estilo no encontrado: " + request.styleId()));
-        Color color = colorRepository.findById(request.colorId())
-                .orElseThrow(() -> new RuntimeException(
-                        "Color no encontrado: " + request.colorId()));
-        Weather weather = weatherRepository.findById(request.weatherId())
-                .orElseThrow(() -> new RuntimeException(
-                        "Clima no encontrado: " + request.weatherId()));
-        Occasion occasion = occasionRepository.findById(request.occasionId())
-                .orElseThrow(() -> new RuntimeException(
-                        "Ocasión no encontrada: " + request.occasionId()));
+
 
         // Actualizar categoría en tbl_clothes
         clothing.setCategory(category);
@@ -167,33 +187,86 @@ public class ClothingServiceImpl implements ClothingService {
         // después de que se vectorizó, así que el embedding es inválido.
         // El motor de recomendación lo detectará y re-vectorizará antes de calcular outfits.
         clothing.setEmbeddingStale(true);
-        clothingRepository.save(clothing);
+        
 
         // Actualizar audit — crear si aún no existe (prenda no procesada por IA
         // pero el usuario quiere asignar manualmente)
         ClothingAiAudit audit = auditRepository
                 .findByClothingId(clothingId)
                 .orElse(ClothingAiAudit.builder().clothing(clothing).build());
+        
+        /*
+        * Reservado para ClothingCorrectionEvent.
+        *
+        * Permitirá capturar el cambio semántico
+        * realizado por el usuario para futuros
+        * procesos de feedback, analytics,
+        * active learning y reentrenamiento IA.
+        */
+
+        ClothingCategory previousCategory = 
+                audit.getPredictedCategory();
+
+        Style previousStyle = 
+                audit.getPredictedStyle();
 
         audit.setPredictedCategory(category);
         audit.setPredictedStyle(style);
-        audit.setPredictedColor(color);
-        audit.setPredictedWeather(weather);
-        audit.setPredictedOccasion(occasion);
         audit.setWasCorrected(true); // ← señal clave para el scoring engine
+        
 
         // Si no había audit previo, marcar la prenda como procesada
         // (el usuario la caracterizó manualmente)
         if (!clothing.isProcessed()) {
             clothing.setProcessed(true);
-            clothingRepository.save(clothing);
         }
 
+        clothingRepository.save(clothing);
         auditRepository.save(audit);
+        
         log.info("ClothingService: Prenda {} actualizada manualmente — was_corrected=true",
                 clothingId);
 
         return toDetail(clothing, audit);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WardrobeEditCatalogDTO getEditCatalog() {
+        log.info("ClothingService: Obteniendo catálogo para edición de guardarropa"
+
+        );
+
+        List<WardrobeEditCatalogDTO.CategoryEntry> categories =
+                categoryRepository
+                        .findByIsActiveTrueOrderByNameAsc()
+                        .stream()
+                        .map(category -> 
+                                new WardrobeEditCatalogDTO.CategoryEntry(
+                                        category.getId(), 
+                                        category.getName(),
+                                        category.getParent() != null 
+                                                ? category.getParent().getId() 
+                                                : null
+                                        )
+                                )
+                                .toList();
+        List<WardrobeEditCatalogDTO.StyleEntry> styles =
+                styleRepository
+                        .findByIsActiveTrueOrderByNameAsc()
+                        .stream()
+                        .map(style -> 
+                                new WardrobeEditCatalogDTO.StyleEntry(
+                                        style.getId(), 
+                                        style.getName()
+                                        )
+                                )
+                        .toList();
+
+        return new WardrobeEditCatalogDTO(
+                categories, 
+                styles
+        );
     }
 
     // ── Delete ────────────────────────────────────────────────────────────────

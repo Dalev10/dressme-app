@@ -36,4 +36,9 @@ public interface ClothingCategoryRepository extends JpaRepository<ClothingCatego
      * Permite que dressme-ai resuelva "T-Shirt" → entidad correcta.
      */
     Optional<ClothingCategory> findByNameIgnoreCase(String name);
+
+    Optional<ClothingCategory> findByIdAndParentIdAndIsActiveTrue(
+        UUID categoryId,
+        UUID parentId
+    );
 }
