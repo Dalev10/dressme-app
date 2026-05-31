@@ -20,93 +20,47 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private static final Logger log =
-            LoggerFactory.getLogger(SecurityConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http)
-            throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        log.info(
-            "********** GATEWAY: CARGANDO CONFIGURACIÓN DE SEGURIDAD PERSONALIZADA **********"
-        );
+        log.info("********** GATEWAY: CARGANDO CONFIGURACIÓN DE SEGURIDAD PERSONALIZADA **********");
 
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session ->
-                    session.sessionCreationPolicy(
-                            SessionCreationPolicy.STATELESS))
+                    session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
 
+                // Swagger
                 .requestMatchers(
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html"
                 ).permitAll()
 
-                .requestMatchers("/api/v1/auth/login")
-                .permitAll()
+                // Auth
+                .requestMatchers("/api/v1/auth/login").permitAll()
 
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/v1/users/profile/**")
-                .permitAll()
+                // Users
+                .requestMatchers(HttpMethod.GET,    "/api/v1/users/profile/**").permitAll()
+                .requestMatchers(HttpMethod.PATCH,  "/api/v1/users/profile/**").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/users/profile/**").permitAll()
 
-                .requestMatchers(
-                        HttpMethod.PATCH,
-                        "/api/v1/users/profile/**")
-                .permitAll()
+                // Onboarding
+                .requestMatchers(HttpMethod.GET,  "/api/v1/onboarding/style-cards").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/onboarding/calibrate").permitAll()
 
-                .requestMatchers(
-                        HttpMethod.DELETE,
-                        "/api/v1/users/profile/**")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/v1/onboarding/style-cards")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.POST,
-                        "/api/v1/onboarding/calibrate")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.POST,
-                        "/api/v1/wardrobe/upload")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/v1/wardrobe/catalog")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/v1/wardrobe/catalog/edit")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/v1/wardrobe/list")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.GET,
-                        "/api/v1/wardrobe/*")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.PATCH,
-                        "/api/v1/wardrobe/*")
-                .permitAll()
-
-                .requestMatchers(
-                        HttpMethod.DELETE,
-                        "/api/v1/wardrobe/*")
-                .permitAll()
+                // Wardrobe
+                .requestMatchers(HttpMethod.POST,   "/api/v1/wardrobe/upload").permitAll()
+                .requestMatchers(HttpMethod.GET,    "/api/v1/wardrobe/catalog").permitAll()
+                .requestMatchers(HttpMethod.GET,    "/api/v1/wardrobe/catalog/edit").permitAll()
+                .requestMatchers(HttpMethod.GET,    "/api/v1/wardrobe/list").permitAll()
+                .requestMatchers(HttpMethod.GET,    "/api/v1/wardrobe/*").permitAll()
+                .requestMatchers(HttpMethod.PATCH,  "/api/v1/wardrobe/*").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/wardrobe/*").permitAll()
 
                 .anyRequest().authenticated()
             );
@@ -117,35 +71,33 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration configuration =
-                new CorsConfiguration();
+        CorsConfiguration configuration = new CorsConfiguration();
 
         configuration.setAllowedOrigins(List.of("*"));
 
-        configuration.setAllowedMethods(
-                List.of(
-                        "GET",
-                        "POST",
-                        "PUT",
-                        "PATCH",
-                        "DELETE",
-                        "OPTIONS"
-                ));
+        configuration.setAllowedMethods(List.of(
+                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
+        ));
 
-        configuration.setAllowedHeaders(
-                List.of(
-                        "Authorization",
-                        "Content-Type"
-                ));
+        /**
+         * se agrega "multipart/form-data" implícitamente al permitir
+         * todos los headers necesarios para el upload de prendas:
+         *
+         *   Authorization      → Bearer JWT del usuario
+         *   Content-Type       → application/json Y multipart/form-data
+         *   X-User-Id          → header interno que el gateway propaga al back
+         *
+         * Sin X-User-Id aquí, el browser bloqueaba el CORS preflight de los
+         * endpoints que propagan el userId (onboarding/calibrate, wardrobe/upload).
+         */
+        configuration.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "X-User-Id"
+        ));
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
-        source.registerCorsConfiguration(
-                "/**",
-                configuration
-        );
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 }

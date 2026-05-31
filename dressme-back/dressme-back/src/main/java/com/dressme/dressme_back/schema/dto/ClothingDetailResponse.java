@@ -63,6 +63,15 @@ public record ClothingDetailResponse(
     boolean wasCorrected,
 
     /** Proveedor que hizo el análisis: "google_vision", "clarifai" */
-    String aiProvider
+    String aiProvider,
+
+        /**
+     * true si el embedding_vector está desactualizado.
+     * Se activa cuando el usuario corrige la prenda manualmente
+     * después de que el motor de recomendación ya la vectorizó.
+     * El motor de recomendación lo usa para saber qué prendas
+     * necesitan re-vectorización antes de calcular outfits.
+     */
+    boolean isEmbeddingStale
 
 ) {}
