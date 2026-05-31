@@ -26,6 +26,8 @@ out/
 *.seed
 postgres-data/
 
+# ./notes/scripts/
+notes/
 # Reglas de agentes de IA
 .cursorrules
 .clinerules

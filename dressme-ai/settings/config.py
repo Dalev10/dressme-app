@@ -18,30 +18,32 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
  
  
 class Settings(BaseSettings):
-    # ── Google Gemini ─────────────────────────────────────────────────────────
-    # Default vacío: el servicio arranca sin la key. Solo es requerida al
-    # correr seed_embeddings.py o al analizar prendas (Fase 5+).
-    # El lifespan de main.py emite un WARNING si no está configurada.
+ 
+    # ── Google Gemini (embeddings + Gemini Vision para prendas) ──────────────
+    # Una sola API key cubre:
+    #   - gemini-embedding-001  (onboarding: style card embeddings)
+    #   - gemini-2.5-flash      (wardrobe: análisis visual de prendas)
     gemini_api_key: str = ""
  
+    # ── dressme-database (catálogo de referencia para el mapeo) ───────────────
+    # CatalogClient llama a GET /internal/wardrobe/catalog antes de cada
+    # análisis (con caché en memoria de 10 min).
+    database_service_url: str = "http://dressme-database:8080"
+ 
     # ── Servicio ──────────────────────────────────────────────────────────────
-    app_name: str = "dressme-ai"
-    app_env: str = "development"     # "development" | "production"
+    app_name:  str = "dressme-ai"
+    app_env:   str = "development"
     log_level: str = "INFO"
  
-    # ── Pydantic Settings config ───────────────────────────────────────────────
     model_config = SettingsConfigDict(
-        env_file=".env",             # Lee el .env si existe (útil en local)
+        env_file=".env",
         env_file_encoding="utf-8",
-        case_sensitive=False,        # GEMINI_API_KEY == gemini_api_key
-        extra="ignore",              # Variables de entorno extra no causan error
+        case_sensitive=False,
+        extra="ignore",
     )
  
  
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """
-    Singleton de configuración.
-    lru_cache garantiza que el .env solo se lee una vez al arrancar.
-    """
     return Settings()
+ 
