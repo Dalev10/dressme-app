@@ -4,11 +4,17 @@ server:
 spring:
   application:
     name: dressme-gateway
+  main:
+    allow-bean-definition-overriding: true
 
 # ── URLs de microservicios internos ───────────────────────────────────────────
 app:
   services:
     backend-url: ${BACKEND_SERVICE_URL:http://dressme-back:8080}
+  # ── Configuración de JWT ─────────────────────────────────────────────────
+  security:
+    jwt-secret: ${JWT_SECRET:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}
+    jwt-expiration-hours: ${JWT_EXPIRATION_HOURS:24}
 
 # ── Configuración de Google OAuth ─────────────────────────────────────────────
 # La URL de validación de tokens de Google.

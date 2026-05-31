@@ -1069,4 +1069,3 @@ INSERT INTO tbl_style_card_mappings (style_card_id, style_id) VALUES
 -- Card 12: Smart Casual
                                                                 ('11111111-0000-0000-0000-000000000012', '66666666-0000-0000-0000-000000000021')  -- Everyday Polished
   ON CONFLICT DO NOTHING;
-

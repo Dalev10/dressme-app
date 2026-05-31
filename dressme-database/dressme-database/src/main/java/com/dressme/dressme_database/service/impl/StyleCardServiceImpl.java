@@ -65,6 +65,7 @@ public class StyleCardServiceImpl implements StyleCardService {
  
         // Re-calibración: borrar selecciones previas antes de guardar las nuevas
         selectionRepository.deleteByUserId(request.userId());
+        selectionRepository.flush();
  
         // Cargar las style cards de una sola vez para evitar N+1 queries
         List<UUID> cardIds = request.selections().stream()

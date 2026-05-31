@@ -1,11 +1,10 @@
 package com.dressme.dressme_back.schema.dto;
- 
-import java.util.UUID;
- 
+
 public record OnboardingCalibrationResponse(
-    UUID userId,
-    boolean isCalibrated,
-    int tasteVectorDimensions,
+    String userId,
+    boolean calibrated,
+    int tasteVectorSize,
     int likesCount,
     int dislikesCount
-) {}
+) {
+}

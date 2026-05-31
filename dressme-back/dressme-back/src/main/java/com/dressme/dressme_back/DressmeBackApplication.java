@@ -6,6 +6,10 @@ import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
 @EnableAsync
+import org.springframework.cloud.openfeign.EnableFeignClients;
+
+@SpringBootApplication
+@EnableFeignClients(basePackages = "com.dressme.dressme_back.client")
 public class DressmeBackApplication {
 
 	public static void main(String[] args) {
