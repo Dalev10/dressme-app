@@ -15,21 +15,15 @@ import java.util.UUID;
  */
 public record WardrobeEditCatalogDTO(
 
-    List<TypeEntry> types,
-    List<CategoryEntry> categories,
-    List<StyleEntry> styles
+        List<CategoryEntry> categories,
+        List<StyleEntry> styles
 
 ) {
-
-    public record TypeEntry(
-            UUID id,
-            String name
-    ) {}
 
     public record CategoryEntry(
             UUID id,
             String name,
-            UUID typeId
+            UUID parentId
     ) {}
 
     public record StyleEntry(
