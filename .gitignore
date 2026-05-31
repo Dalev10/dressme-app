@@ -33,3 +33,6 @@ notes/
 .clinerules
 .agents/
 
+# Ignorar imágenes del armario generadas en local/contenedor
+wardrobe-images/
+**/wardrobe-images/
