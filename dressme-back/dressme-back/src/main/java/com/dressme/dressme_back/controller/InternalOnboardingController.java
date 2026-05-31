@@ -4,12 +4,9 @@ import com.dressme.dressme_back.schema.dto.OnboardingCalibrationResponse;
 import com.dressme.dressme_back.schema.dto.OnboardingSelectionRequest;
 import com.dressme.dressme_back.schema.dto.StyleCardDTO;
 import com.dressme.dressme_back.service.OnboardingOrchestratorService;
-import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,23 +25,18 @@ public class InternalOnboardingController {
         return onboardingService.getStyleCards();
     }
 
+    /**
+     * Único método calibrate — usa X-User-Id inyectado por el Gateway.
+     * El método residuo con @AuthenticationPrincipal Jwt fue eliminado:
+     * era un remanente de la arquitectura anterior con JWT en el back,
+     * ya reemplazada por el header X-User-Id en el Gateway.
+     */
     @PostMapping("/calibrate")
-public OnboardingCalibrationResponse calibrate(
-    @RequestHeader("X-User-Id") String secureUserId, // 👈 Cambiamos Jwt por el Header
-    @Valid @RequestBody OnboardingSelectionRequest request
-) {
-    log.info("Onboarding Controller: calibración para usuario {}", secureUserId);
-    
-    // Ahora secureUserId ya es el string con el UUID del usuario
-    return onboardingService.calibrate(secureUserId, request);
-}
     public OnboardingCalibrationResponse calibrate(
-        @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
-        @Valid @RequestBody OnboardingSelectionRequest request
+            @RequestHeader("X-User-Id") String secureUserId,
+            @Valid @RequestBody OnboardingSelectionRequest request
     ) {
-        String secureUserId = jwt.getSubject();
         log.info("Onboarding Controller: calibración para usuario {}", secureUserId);
-
         return onboardingService.calibrate(secureUserId, request);
     }
 }
