@@ -150,11 +150,9 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
 
         // Transformar ClothingEditRequest → ClothingUpdateRequest (contrato de dressme-database)
         ClothingUpdateRequest dbRequest = new ClothingUpdateRequest(
+                request.typeId(),
                 request.categoryId(),
-                request.styleId(),
-                request.colorId(),
-                request.weatherId(),
-                request.occasionId()
+                request.styleId()
         );
 
         return databaseClient.patch()
@@ -167,6 +165,21 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 })
                 .body(ClothingDetailResponse.class);
     }
+
+    
+    @Override
+    public WardrobeEditCatalogDTO getEditCatalog() {
+
+        log.info("Wardrobe: Solicitando catálogo de edición");
+
+        return databaseClient.get()
+                .uri("/internal/wardrobe/catalog/edit")
+                .retrieve()
+                .body(WardrobeEditCatalogDTO.class);
+   }
+
+
+
 
     // ── Eliminación ───────────────────────────────────────────────────────────
 

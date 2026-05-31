@@ -59,6 +59,17 @@ public class InternalWardrobeController {
         return ResponseEntity.ok(wardrobeService.getCatalog());
     }
 
+
+    @GetMapping("/catalog/edit")
+    public ResponseEntity<WardrobeEditCatalogDTO> getEditCatalog() {
+
+        log.info("Back-Wardrobe: GET /catalog/edit");
+
+        return ResponseEntity.ok(
+                wardrobeService.getEditCatalog()
+        );
+    }
+
     // ── Lista resumida ────────────────────────────────────────────────────────
 
     @GetMapping("/user/{userId}")

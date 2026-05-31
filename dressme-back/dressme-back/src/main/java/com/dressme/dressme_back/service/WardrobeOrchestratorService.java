@@ -35,4 +35,6 @@ public interface WardrobeOrchestratorService {
 
     /** Catálogo de referencia: categorías + estilos + colores + ocasiones + climas. */
     CatalogDTO getCatalog();
+
+    WardrobeEditCatalogDTO getEditCatalog();
 }
