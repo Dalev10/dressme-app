@@ -51,6 +51,37 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,  "/api/v1/onboarding/style-cards").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/onboarding/calibrate").permitAll()
 
+
+                // ── Wardrobe ─────────────────────────────────────────────
+
+                .requestMatchers(HttpMethod.POST,
+                        "/api/v1/wardrobe/upload")
+                .permitAll()
+
+                .requestMatchers(HttpMethod.GET,
+                        "/api/v1/wardrobe/catalog")
+                .permitAll()
+
+                .requestMatchers(HttpMethod.GET,
+                        "/api/v1/wardrobe/catalog/edit")
+                .permitAll()
+
+                .requestMatchers(HttpMethod.GET,
+                        "/api/v1/wardrobe/list")
+                .permitAll()
+
+                .requestMatchers(HttpMethod.GET,
+                        "/api/v1/wardrobe/*")
+                .permitAll()
+
+                .requestMatchers(HttpMethod.PATCH,
+                        "/api/v1/wardrobe/*")
+                .permitAll()
+
+                .requestMatchers(HttpMethod.DELETE,
+                        "/api/v1/wardrobe/*")
+                .permitAll()
+
                 // ── Protegidas ────────────────────────────────────────────────
                 .anyRequest().authenticated()
             );

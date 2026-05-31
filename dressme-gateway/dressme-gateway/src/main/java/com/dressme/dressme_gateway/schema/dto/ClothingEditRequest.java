@@ -12,19 +12,13 @@ import java.util.UUID;
  */
 public record ClothingEditRequest(
 
+    @NotNull(message = "El tipo es obligatorio")
+    UUID typeId,
+
     @NotNull(message = "La categoría es obligatoria")
     UUID categoryId,
 
     @NotNull(message = "El estilo es obligatorio")
-    UUID styleId,
-
-    @NotNull(message = "El color es obligatorio")
-    UUID colorId,
-
-    @NotNull(message = "El clima es obligatorio")
-    UUID weatherId,
-
-    @NotNull(message = "La ocasión es obligatoria")
-    UUID occasionId
+    UUID styleId
 
 ) {}

@@ -94,6 +94,23 @@ public class WardrobeController {
         return ResponseEntity.ok(catalog);
     }
 
+
+    @GetMapping("/catalog/edit")
+    public ResponseEntity<WardrobeEditCatalogDTO> getEditCatalog() {
+
+        log.info("Gateway-Wardrobe: GET /catalog/edit");
+
+        WardrobeEditCatalogDTO catalog = backClient.get()
+                .uri("/internal/wardrobe/catalog/edit")
+                .retrieve()
+                .body(WardrobeEditCatalogDTO.class);
+
+        return ResponseEntity.ok(catalog);
+   }
+
+
+
+
     // ── Lista resumida ───────────────────────────────────────────────────────
 
     /**
