@@ -1,86 +1,87 @@
-name: dressme-app
+  name: dressme-app
 
-services:
-  # 1. Base de Datos Local con pgvector
-  dressme-db:
-    image: ankane/pgvector:latest
-    container_name: dressme-db
-    restart: always
-    ports:
-      - "5434:5432"
-    env_file:
-      - .env
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
-    networks:
-      - dressme-network
+  services:
+    # 1. Base de Datos Local con pgvector
+    dressme-db:
+      image: ankane/pgvector:latest
+      container_name: dressme-db
+      restart: always
+      ports:
+        - "5434:5432"
+      env_file:
+        - .env
+      volumes:
+        - postgres_data:/var/lib/postgresql/data
+        - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
+      networks:
+        - dressme-network
 
-  # 2. Microservicio de Base de Datos
-  dressme-database:
-    build:
-      context: ./dressme-database/dressme-database
-      dockerfile: Dockerfile
-    container_name: dressme-database
-    env_file:
-      - .env
-    ports:
-      - "8082:8080"
-    depends_on:
-      - dressme-db
-    networks:
-      - dressme-network
+    # 2. Microservicio de Base de Datos
+    dressme-database:
+      build:
+        context: ./dressme-database/dressme-database
+        dockerfile: Dockerfile
+      container_name: dressme-database
+      env_file:
+        - .env
+      ports:
+        - "8082:8080"
+      depends_on:
+        - dressme-db
+      networks:
+        - dressme-network
 
-  # 3. Microservicio Cerebro / Orquestador
-  dressme-back:
-    build:
-      context: ./dressme-back/dressme-back
-      dockerfile: Dockerfile
-    container_name: dressme-back
-    env_file:
-      - .env
-    ports:
-      - "8081:8080"
-    depends_on:
-      - dressme-database
-    networks:
-      - dressme-network
+    # 3. Microservicio Cerebro / Orquestador
+    dressme-back:
+      build:
+        context: ./dressme-back/dressme-back
+        dockerfile: Dockerfile
+      container_name: dressme-back
+      env_file:
+        - .env
+      ports:
+        - "8081:8080"
+      depends_on:
+        - dressme-database
+      networks:
+        - dressme-network
 
-  # 4. Microservicio Gateway (Público)
-  dressme-gateway:
-    build:
-      context: ./dressme-gateway/dressme-gateway
-      dockerfile: Dockerfile
-    container_name: dressme-gateway
-    env_file:
-      - .env
-    ports:
-      - "8080:8080"
-    depends_on:
-      - dressme-back
-    networks:
-      - dressme-network
+    # 4. Microservicio Gateway (Público)
+    dressme-gateway:
+      build:
+        context: ./dressme-gateway/dressme-gateway
+        dockerfile: Dockerfile
+      container_name: dressme-gateway
+      env_file:
+        - .env
+      ports:
+        - "8080:8080"
+      depends_on:
+        - dressme-back
+      networks:
+        - dressme-network
 
-  # 5. Microservicio de Inteligencia Artificial
-# 5. Microservicio de Inteligencia Artificial
-  dressme-ai:
-    build:
-      context: ./dressme-ai
-      dockerfile: Dockerfile
-    container_name: dressme-ai
-    env_file:
-      - .env
-    environment:
-      - AI_SERVICE_URL=http://127.0.0.1:8000
-    depends_on:
-      - dressme-db
-      - dressme-database
-    networks:
-      - dressme-network
+    # 5. Microservicio de Inteligencia Artificial
+    dressme-ai:
+      build:
+        context: ./dressme-ai
+        dockerfile: Dockerfile
+      container_name: dressme-ai
+      env_file:
+        - .env
+      environment:
+        - AI_SERVICE_URL=http://dressme-ai:8000
+      ports:
+        - "8000:8000"
+      depends_on:
+        - dressme-db
+        - dressme-database
+      networks:
+        - dressme-network
 
-networks:
-  dressme-network:
-    driver: bridge
+  networks:
+    dressme-network:
+      driver: bridge
 
-volumes:
-  postgres_data:
+  volumes:
+    postgres_data:
