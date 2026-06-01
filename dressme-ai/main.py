@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-
+from routers.trend import router as trend_router
 from settings.config import get_settings
 from infra.error_handler import register_error_handlers
 from routers import onboarding, wardrobe
@@ -70,8 +70,9 @@ register_error_handlers(app)
 
 app.include_router(onboarding)
 app.include_router(wardrobe)
-# ── Registro de routers ───────────────────────────────────────────────────────
-app.include_router(onboarding_router)
+app.include_router(trend_router)
+
+logger.info("Routers registrados: onboarding, trend")
 
 logger.info("Routers registrados: /internal/ai/onboarding/generate-embeddings, /internal/ai/onboarding/compute-taste-vector")
 

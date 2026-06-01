@@ -24,10 +24,12 @@ from functools import lru_cache
 from settings.config import get_settings
 from services.taste_vector_service import TasteVectorService
 from services.embedding_service import EmbeddingService
+from services.trend_score_service import TrendScoreService
 from services.catalog_client import CatalogClient
 from services.wardrobe import WardrobeAnalysisService
 
 
+# ── Servicios ─────────────────────────────────────────────────────────────────
 
 def get_taste_vector_service() -> TasteVectorService:
     return TasteVectorService()
@@ -56,7 +58,7 @@ def get_catalog_client() -> CatalogClient:
 def get_wardrobe_analysis_service() -> WardrobeAnalysisService:
     """
     Ensambla WardrobeAnalysisService inyectando:
-      - api_key: str           → desde settings (misma key que EmbeddingService)
+      - api_key: str             → desde settings (misma key que EmbeddingService)
       - catalog: CatalogProvider → la implementación CatalogClient
 
     Si en el futuro el catálogo viene de Redis, solo hay que cambiar
@@ -64,7 +66,21 @@ def get_wardrobe_analysis_service() -> WardrobeAnalysisService:
     WardrobeAnalysisService no se toca.
     """
     settings = get_settings()
+
     return WardrobeAnalysisService(
         api_key=settings.gemini_api_key,
-        catalog=get_catalog_client(),   # inyectado como CatalogProvider
+        catalog=get_catalog_client(),  # inyectado como CatalogProvider
     )
+
+
+# ── Trend Score ───────────────────────────────────────────────────────────────
+
+@lru_cache(maxsize=1)
+def get_trend_score_service() -> TrendScoreService:
+    """
+    TrendScoreService sin dependencias de BD local.
+    Consume dressme-database vía HTTP.
+
+    lru_cache garantiza que el servicio se instancia una sola vez.
+    """
+    return TrendScoreService()

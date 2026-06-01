@@ -33,6 +33,14 @@ notes/
 .clinerules
 .agents/
 
+# Archivos y scripts locales
+notes/
+run.sh
+.venv/
+checkpoint_prendas.json
+trend_metadata_report.json
+
+dressme-ai/dataset_moda_actual/
 # Ignorar imágenes del armario generadas en local/contenedor
 wardrobe-images/
 **/wardrobe-images/
