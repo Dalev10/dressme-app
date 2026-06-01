@@ -1,56 +1,32 @@
 server:
   port: 8080
-
 spring:
   application:
     name: dressme-database
-
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
-
-  # ── Flyway ──────────────────────────────────────────────────────────────────
-  # Reemplaza el mecanismo schema.sql / data.sql de Spring.
-  # Los scripts viven en src/main/resources/db/migration/ con el patrón
-  # V{version}__{descripcion}.sql  (doble guion bajo obligatorio).
-  #
-  # Al arrancar, Flyway:
-  #   1. Verifica la tabla flyway_schema_history en la DB.
-  #   2. Aplica en orden los scripts cuyo checksum aún no figura en la tabla.
-  #   3. Si un script ya aplicado fue modificado → falla con error (protección).
-  #
-  # baseline-on-migrate = true:
-  #   Necesario la PRIMERA vez que Flyway toma el control de una DB que ya
-  #   tiene tablas (creadas previamente por ddl-auto: update).
-  #   Marca la versión actual como "baseline" sin re-ejecutar V1 ni V2.
-  #   En entornos nuevos (contenedores limpios) esta flag no tiene efecto.
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
-    validate-on-migrate: true    # rechaza scripts modificados tras aplicarse
-
-  # sql.init.mode se elimina: Flyway maneja toda la inicialización de SQL.
-  # Mantener 'always' junto con Flyway causaría doble ejecución del schema.
-
+    validate-on-migrate: true
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    user: ${DB_USER}
+    password: ${DB_PASSWORD}
   jpa:
-    # none: Hibernate NO toca el DDL — Flyway es el único responsable del schema.
-    # Antes era 'update', que en producción puede alterar columnas de forma
-    # inesperada. Con Flyway siempre se sabe exactamente qué se aplica y cuándo.
     hibernate:
       ddl-auto: none
-    defer-datasource-initialization: false   # Flyway corre antes que JPA; no necesita defer
+    defer-datasource-initialization: false
     show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
-
 logging:
   level:
     org.flywaydb: DEBUG
