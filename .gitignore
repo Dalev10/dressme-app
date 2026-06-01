@@ -26,20 +26,21 @@ out/
 *.seed
 postgres-data/
 
+# ./notes/scripts/
+notes/
 # Reglas de agentes de IA
 .cursorrules
 .clinerules
 .agents/
-../.cursorrules
-../.clinerules
-../.agents/
 
 # Archivos y scripts locales
 notes/
 run.sh
 .venv/
-.venv
 checkpoint_prendas.json
 trend_metadata_report.json
 
 dressme-ai/dataset_moda_actual/
+# Ignorar imágenes del armario generadas en local/contenedor
+wardrobe-images/
+**/wardrobe-images/

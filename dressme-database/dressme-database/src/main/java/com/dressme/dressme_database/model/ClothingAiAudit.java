@@ -40,6 +40,16 @@ public class ClothingAiAudit {
     @JoinColumn(name = "predicted_color_id")
     private Color predictedColor;
 
+    /** Valores HSL exactos detectados por Gemini Vision (independientes del color canónico) */
+    @Column(name = "detected_hue")
+    private Integer detectedHue;
+
+    @Column(name = "detected_saturation")
+    private Integer detectedSaturation;
+
+    @Column(name = "detected_lightness")
+    private Integer detectedLightness;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "predicted_weather_id")
     private Weather predictedWeather;

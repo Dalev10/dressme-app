@@ -1,4 +1,24 @@
 -- =============================================================================
+-- V2__seed_data.sql
+-- Datos iniciales obligatorios — migrado desde data.sql a Flyway.
+--
+-- Contiene exactamente los mismos INSERT que el data.sql original,
+-- con los UUIDs y valores calibrados del equipo. ON CONFLICT DO NOTHING
+-- garantiza idempotencia si Flyway re-intenta en caso de error parcial.
+--
+-- Orden de inserción respeta FK constraints:
+--   1. tbl_style_cards (sin dependencias)
+--   2. tbl_colors
+--   3. tbl_color_compatibility (FK → tbl_colors)
+--   4. tbl_providers
+--   5. tbl_clothing_categories (autorreferenciada, padres antes que hijos)
+--   6. tbl_occasions
+--   7. tbl_weather
+--   8. tbl_styles
+--   9. tbl_style_card_mappings (FK → tbl_style_cards + tbl_styles)
+-- =============================================================================
+
+-- =============================================================================
 -- SEED: tbl_style_cards
 -- 12 tarjetas de onboarding para el flujo de caracterización de usuario.
 --
@@ -1001,28 +1021,28 @@ ON CONFLICT DO NOTHING;
 -- =====================================================================
 -- LLENADO DE MICRO-ESTILOS (tbl_styles)
 -- =====================================================================
-INSERT INTO tbl_styles (id, name, description) VALUES
-                                                 ('66666666-0000-0000-0000-000000000001', 'Pure Minimalist', 'Extreme simplicity, solid neutral colors, zero logos.'),
-                                                 ('66666666-0000-0000-0000-000000000002', 'Quiet Luxury', 'High-end fabrics, tailored but understated aesthetics.'),
-                                                 ('66666666-0000-0000-0000-000000000003', 'Normcore', 'Deliberately casual, average, everyday clothing choices.'),
-                                                 ('66666666-0000-0000-0000-000000000004', 'Skater', 'Loose fits, skate brand hoodies, durable canvas shoes.'),
-                                                 ('66666666-0000-0000-0000-000000000005', 'Techwear', 'Functional garments with utility straps, pockets, and synthetic fabrics.'),
-                                                 ('66666666-0000-0000-0000-000000000006', 'Hypebeast', 'Focus on limited-edition streetwear drops, loud logos, and trend-chasing.'),
-                                                 ('66666666-0000-0000-0000-000000000007', 'Corporate Formal', 'Strict traditional tailoring, complete suits, and ties.'),
-                                                 ('66666666-0000-0000-0000-000000000008', 'Old Money', 'Classic elegance inspired by historic wealthy families; polos, oxfords, blazers.'),
-                                                 ('66666666-0000-0000-0000-000000000009', 'Boho-Chic', 'Artistic prints, flowy maxi silhouettes, suede elements.'),
-                                                 ('66666666-0000-0000-0000-000000000010', 'Festival Folk', 'Fringe jackets, crochet tops, and western-influenced indie accessories.'),
-                                                 ('66666666-0000-0000-0000-000000000011', 'Gym Athletic', 'Performance activewear, compression gear, and seamless knit wear.'),
-                                                 ('66666666-0000-0000-0000-000000000012', 'Gothic Scholarly', 'Dark academic looks heavily featuring wool, tweed, and dark color palettes.'),
-                                                 ('66666666-0000-0000-0000-000000000013', 'Preppy Classic', 'Ivy League student aesthetics; argyle vests, pleated skirts, loafers.'),
-                                                 ('66666666-0000-0000-0000-000000000014', 'Y2K Pop', 'Bright candy colors, low-rise pants, and glossy synthetic fabrics.'),
-                                                 ('66666666-0000-0000-0000-000000000015', '90s Grunge', 'Oversized flannel shirts, distressed denim, and heavy combat boots.'),
-                                                 ('66666666-0000-0000-0000-000000000016', 'Prairie Romantic', 'Puffed sleeves, cottage floral prints, and linen lace trim.'),
-                                                 ('66666666-0000-0000-0000-000000000017', 'Smart Corporate', 'Hybrid professional clothes; chinos paired with unstructured blazers.'),
-                                                 ('66666666-0000-0000-0000-000000000018', 'Linen Breeze', 'Breathable linen clothes, nautical stripes, relaxed maritime resort wear.'),
-                                                 ('66666666-0000-0000-0000-000000000019', 'Punk Rock', 'Studded leather jackets, band tees, safety pins, and ripped black denim.'),
-                                                 ('66666666-0000-0000-0000-000000000020', 'Cyberpunk / Dark Avant-Garde', 'Futuristic, asymmetrical silhouettes, heavy use of black PVC or latex leather.'),
-                                                 ('66666666-0000-0000-0000-000000000021', 'Everyday Polished', 'The standard uniform: neat fitted jeans, clean crewnecks, leather sneakers.')
+INSERT INTO tbl_styles (id, name, description, is_active) VALUES
+                                                 ('66666666-0000-0000-0000-000000000001', 'Pure Minimalist', 'Extreme simplicity, solid neutral colors, zero logos.', true),
+                                                 ('66666666-0000-0000-0000-000000000002', 'Quiet Luxury', 'High-end fabrics, tailored but understated aesthetics.', true),
+                                                 ('66666666-0000-0000-0000-000000000003', 'Normcore', 'Deliberately casual, average, everyday clothing choices.', true),
+                                                 ('66666666-0000-0000-0000-000000000004', 'Skater', 'Loose fits, skate brand hoodies, durable canvas shoes.', true),
+                                                 ('66666666-0000-0000-0000-000000000005', 'Techwear', 'Functional garments with utility straps, pockets, and synthetic fabrics.', true),
+                                                 ('66666666-0000-0000-0000-000000000006', 'Hypebeast', 'Focus on limited-edition streetwear drops, loud logos, and trend-chasing.', true),
+                                                 ('66666666-0000-0000-0000-000000000007', 'Corporate Formal', 'Strict traditional tailoring, complete suits, and ties.', true),
+                                                 ('66666666-0000-0000-0000-000000000008', 'Old Money', 'Classic elegance inspired by historic wealthy families; polos, oxfords, blazers.', true),
+                                                 ('66666666-0000-0000-0000-000000000009', 'Boho-Chic', 'Artistic prints, flowy maxi silhouettes, suede elements.', true),
+                                                 ('66666666-0000-0000-0000-000000000010', 'Festival Folk', 'Fringe jackets, crochet tops, and western-influenced indie accessories.', true),
+                                                 ('66666666-0000-0000-0000-000000000011', 'Gym Athletic', 'Performance activewear, compression gear, and seamless knit wear.', true),
+                                                 ('66666666-0000-0000-0000-000000000012', 'Gothic Scholarly', 'Dark academic looks heavily featuring wool, tweed, and dark color palettes.', true),
+                                                 ('66666666-0000-0000-0000-000000000013', 'Preppy Classic', 'Ivy League student aesthetics; argyle vests, pleated skirts, loafers.', true),
+                                                 ('66666666-0000-0000-0000-000000000014', 'Y2K Pop', 'Bright candy colors, low-rise pants, and glossy synthetic fabrics.', true),
+                                                 ('66666666-0000-0000-0000-000000000015', '90s Grunge', 'Oversized flannel shirts, distressed denim, and heavy combat boots.', true),
+                                                 ('66666666-0000-0000-0000-000000000016', 'Prairie Romantic', 'Puffed sleeves, cottage floral prints, and linen lace trim.', true),
+                                                 ('66666666-0000-0000-0000-000000000017', 'Smart Corporate', 'Hybrid professional clothes; chinos paired with unstructured blazers.', true),
+                                                 ('66666666-0000-0000-0000-000000000018', 'Linen Breeze', 'Breathable linen clothes, nautical stripes, relaxed maritime resort wear.', true),
+                                                 ('66666666-0000-0000-0000-000000000019', 'Punk Rock', 'Studded leather jackets, band tees, safety pins, and ripped black denim.', true),
+                                                 ('66666666-0000-0000-0000-000000000020', 'Cyberpunk / Dark Avant-Garde', 'Futuristic, asymmetrical silhouettes, heavy use of black PVC or latex leather.', true),
+                                                 ('66666666-0000-0000-0000-000000000021', 'Everyday Polished', 'The standard uniform: neat fitted jeans, clean crewnecks, leather sneakers.', true)
   ON CONFLICT DO NOTHING;
 
 -- =====================================================================

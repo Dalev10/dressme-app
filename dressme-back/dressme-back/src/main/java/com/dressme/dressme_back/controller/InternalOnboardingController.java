@@ -25,14 +25,18 @@ public class InternalOnboardingController {
         return onboardingService.getStyleCards();
     }
 
+    /**
+     * Único método calibrate — usa X-User-Id inyectado por el Gateway.
+     * El método residuo con @AuthenticationPrincipal Jwt fue eliminado:
+     * era un remanente de la arquitectura anterior con JWT en el back,
+     * ya reemplazada por el header X-User-Id en el Gateway.
+     */
     @PostMapping("/calibrate")
-public OnboardingCalibrationResponse calibrate(
-    @RequestHeader("X-User-Id") String secureUserId, // 👈 Cambiamos Jwt por el Header
-    @Valid @RequestBody OnboardingSelectionRequest request
-) {
-    log.info("Onboarding Controller: calibración para usuario {}", secureUserId);
-    
-    // Ahora secureUserId ya es el string con el UUID del usuario
-    return onboardingService.calibrate(secureUserId, request);
-}
+    public OnboardingCalibrationResponse calibrate(
+            @RequestHeader("X-User-Id") String secureUserId,
+            @Valid @RequestBody OnboardingSelectionRequest request
+    ) {
+        log.info("Onboarding Controller: calibración para usuario {}", secureUserId);
+        return onboardingService.calibrate(secureUserId, request);
+    }
 }

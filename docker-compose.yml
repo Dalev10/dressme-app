@@ -31,20 +31,22 @@
       networks:
         - dressme-network
 
-    # 3. Microservicio Cerebro / Orquestador
-    dressme-back:
-      build:
-        context: ./dressme-back/dressme-back
-        dockerfile: Dockerfile
-      container_name: dressme-back
-      env_file:
-        - .env
-      ports:
-        - "8081:8080"
-      depends_on:
-        - dressme-database
-      networks:
-        - dressme-network
+  # 3. Microservicio Cerebro / Orquestador
+  dressme-back:
+    build:
+      context: ./dressme-back/dressme-back
+      dockerfile: Dockerfile
+    container_name: dressme-back
+    env_file:
+      - .env
+    ports:
+      - "8081:8080"
+    depends_on:
+      - dressme-database
+    volumes:
+      - ./wardrobe-images:/app/images
+    networks:
+      - dressme-network
 
     # 4. Microservicio Gateway (Público)
     dressme-gateway:
@@ -85,3 +87,4 @@
 
   volumes:
     postgres_data:
+    wardrobe_images:
