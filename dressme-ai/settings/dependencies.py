@@ -26,6 +26,8 @@ from services.taste_vector_service import TasteVectorService
 from services.embedding_service import EmbeddingService
 from services.catalog_client import CatalogClient
 from services.wardrobe import WardrobeAnalysisService
+from services.embedding_clothing_service import EmbeddingClothingService
+from services.outfit_generator_service import OutfitGeneratorService
 
 
 
@@ -68,3 +70,15 @@ def get_wardrobe_analysis_service() -> WardrobeAnalysisService:
         api_key=settings.gemini_api_key,
         catalog=get_catalog_client(),   # inyectado como CatalogProvider
     )
+
+
+# ── Outfit ────────────────────────────────────────────────────────────────────
+ 
+@lru_cache(maxsize=1)
+def get_embedding_clothing_service() -> EmbeddingClothingService:
+    settings = get_settings()
+    return EmbeddingClothingService(api_key=settings.gemini_api_key)
+ 
+ 
+def get_outfit_generator_service() -> OutfitGeneratorService:
+    return OutfitGeneratorService()
