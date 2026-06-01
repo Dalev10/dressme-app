@@ -1,21 +1,5 @@
 """
 scripts/seed_embeddings.py
-───────────────────────────
-Script one-shot que:
-  1. Lee las 12 style cards de tbl_style_cards (las que tienen embedding_vector = NULL)
-  2. Llama al endpoint POST /ai/onboarding/generate-embeddings
-  3. Persiste los vectores resultantes en tbl_style_cards.embedding_vector
-
-Se ejecuta UNA SOLA VEZ después del primer arranque del sistema,
-o cada vez que se agreguen style cards nuevas.
-
-Uso:
-    # Desde la raíz de dressme-ai, con el servicio corriendo:
-    python scripts/seed_embeddings.py
-
-Variables de entorno requeridas (mismas que el servicio):
-    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
-    AI_SERVICE_URL  →  URL interna de dressme-ai (default: http://localhost:8000)
 """
 
 import os
@@ -23,6 +7,7 @@ import sys
 import logging
 import requests
 import psycopg2
+import time
 from psycopg2.extras import RealDictCursor
 
 logging.basicConfig(
@@ -32,8 +17,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Configuración ─────────────────────────────────────────────────────────────
-
 DB_CONFIG = {
     "host":     os.environ["DB_HOST"],
     "port":     int(os.environ.get("DB_PORT", 5432)),
@@ -42,23 +25,11 @@ DB_CONFIG = {
     "password": os.environ["DB_PASS"],
 }
 
-# ── Configuración de URLs limpias y dinámicas ──────────────────────────────────
-
-# Si no existe la variable de entorno, apunta al localhost interno del contenedor
 AI_SERVICE_URL = os.environ.get("AI_SERVICE_URL", "http://127.0.0.1:8000")
-
-# Construimos la ruta utilizando el prefijo unificado /internal que creamos
 GENERATE_ENDPOINT = f"{AI_SERVICE_URL.rstrip('/')}/internal/ai/onboarding/generate-embeddings"
 
 
-# ── Paso 1: leer tarjetas sin embedding ───────────────────────────────────────
-
 def fetch_cards_without_embeddings(conn) -> list[dict]:
-    """
-    Consulta las style cards que aún no tienen embedding generado.
-    Idempotente: si todas ya tienen embedding, devuelve lista vacía
-    y el script termina sin hacer ninguna llamada a OpenAI.
-    """
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute("""
             SELECT id::text, semantic_description
@@ -71,100 +42,57 @@ def fetch_cards_without_embeddings(conn) -> list[dict]:
     return [dict(row) for row in rows]
 
 
-# ── Paso 2: llamar al servicio AI ─────────────────────────────────────────────
-
-# ── Paso 2: llamar al servicio AI ─────────────────────────────────────────────
-import time
 def call_generate_embeddings(cards: list[dict]) -> list[dict]:
-    """
-    Llama a POST /internal/ai/onboarding/generate-embeddings con tolerancia de arranque.
-    Devuelve la lista de {id, embedding_vector} lista para persistir.
-    """
     payload = {
         "style_cards": [
-            {
-                "id": card["id"],
-                "semantic_description": card["semantic_description"],
-            }
+            {"id": card["id"], "semantic_description": card["semantic_description"]}
             for card in cards
         ]
     }
 
     logger.info("Llamando a %s con %d tarjetas...", GENERATE_ENDPOINT, len(cards))
 
-    # Reintentos dinámicos en lo que FastAPI termina de encender
     for intento in range(5):
         try:
-            response = requests.post(
-                GENERATE_ENDPOINT,
-                json=payload,
-                timeout=60,  # El modelo puede tardar unos segundos en procesar el batch
-            )
-            
+            response = requests.post(GENERATE_ENDPOINT, json=payload, timeout=60)
             if response.status_code == 200:
                 data = response.json()
                 logger.info(
                     "Embeddings generados con modelo '%s' para %d tarjetas.",
-                    data["model_used"],
-                    data["total_processed"],
+                    data["model_used"], data["total_processed"],
                 )
                 return data["embeddings"]
             else:
-                logger.error(
-                    "El servicio AI respondió con %d: %s", 
-                    response.status_code, 
-                    response.text
-                )
+                logger.error("El servicio AI respondió con %d: %s", response.status_code, response.text)
                 sys.exit(1)
-                
         except requests.exceptions.ConnectionError:
             if intento < 4:
                 logger.warning("El servidor FastAPI aún está arrancando... Reintentando en 3 segundos...")
                 time.sleep(3)
             else:
-                logger.error("No se pudo establecer conexión con FastAPI tras varios intentos.")
+                logger.error("No se pudo conectar con FastAPI.")
                 sys.exit(1)
 
 
-# ── Paso 3: persistir en DB ───────────────────────────────────────────────────
-
 def persist_embeddings(conn, embeddings: list[dict]) -> None:
-    """
-    Actualiza tbl_style_cards con los vectores generados.
-
-    psycopg2 no tiene soporte nativo para el tipo vector de pgvector,
-    así que serializamos el array como string '[f1, f2, ...]' que
-    PostgreSQL acepta y convierte automáticamente al tipo vector.
-    """
     with conn.cursor() as cur:
         for item in embeddings:
-            # Serializar el array de floats al formato que acepta pgvector
             vector_str = "[" + ",".join(str(f) for f in item["embedding_vector"]) + "]"
-
             cur.execute(
-                """
-                UPDATE tbl_style_cards
-                SET embedding_vector = %s::vector
-                WHERE id = %s::uuid
-                """,
+                "UPDATE tbl_style_cards SET embedding_vector = %s::vector WHERE id = %s::uuid",
                 (vector_str, item["id"]),
             )
             logger.info("  ✓ Embedding persistido para tarjeta %s", item["id"])
-
     conn.commit()
     logger.info("Commit realizado. %d embeddings guardados en DB.", len(embeddings))
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     logger.info("═══════════════════════════════════════════════")
     logger.info("  seed_embeddings.py — Iniciando")
     logger.info("═══════════════════════════════════════════════")
 
-    # Conectar a PostgreSQL
-    logger.info("Conectando a PostgreSQL en %s:%s/%s...",
-                DB_CONFIG["host"], DB_CONFIG["port"], DB_CONFIG["dbname"])
+    logger.info("Conectando a PostgreSQL en %s:%s/%s...", DB_CONFIG["host"], DB_CONFIG["port"], DB_CONFIG["dbname"])
     try:
         conn = psycopg2.connect(**DB_CONFIG)
     except Exception as e:
@@ -172,7 +100,6 @@ def main():
         sys.exit(1)
 
     try:
-        # Paso 1: ¿hay tarjetas sin embedding?
         cards = fetch_cards_without_embeddings(conn)
 
         if not cards:
@@ -180,11 +107,7 @@ def main():
             return
 
         logger.info("Encontradas %d tarjetas sin embedding.", len(cards))
-
-        # Paso 2: generar embeddings vía servicio AI
         embeddings = call_generate_embeddings(cards)
-
-        # Paso 3: persistir en DB
         persist_embeddings(conn, embeddings)
 
         logger.info("═══════════════════════════════════════════════")

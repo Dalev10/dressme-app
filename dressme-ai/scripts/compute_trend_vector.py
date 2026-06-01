@@ -1,22 +1,6 @@
 """
-scripts/compute_trend_vector.py  — VERSIÓN REFACTORIZADA
-──────────────────────────────────────────────────────────
-SDK: google-genai==2.7.0  (nueva API — from google import genai)
-
-Script batch que:
-  1. Lee todas las imágenes de Dataset_moda_actual.
-  2. Extrae atributos de cada prenda con Gemini Vision (gemini-2.5-flash).
-  3. Genera embeddings de texto con gemini-embedding-001 (1536 dims).
-  4. Calcula el vector promedio de todos los embeddings.
-  5. Persiste el vector llamando al endpoint REST de dressme-back.
-
-Variables de entorno requeridas:
-    GEMINI_API_KEY      → API key de Google Gemini
-    BACK_URL            → URL base de dressme-back (default: http://dressme-back:8080)
-    INTERNAL_JWT_SECRET → Secret JWT compartido con dressme-back
-
-Ejecución:
-    python scripts/compute_trend_vector.py --path dataset_moda_actual --desc "Primera carga"
+scripts/compute_trend_vector.py
+SDK: google-genai==2.7.0
 """
 
 import argparse
@@ -24,67 +8,52 @@ import datetime
 import json
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import requests
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from jose import jwt
 from PIL import Image
 from dotenv import load_dotenv, find_dotenv
 
-# Cargar variables de entorno buscando el archivo .env hacia arriba en el árbol de directorios
 load_dotenv(find_dotenv())
 
-# ── Logging ───────────────────────────────────────────────────────────────────
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
-
-# ── Constantes ────────────────────────────────────────────────────────────────
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 CHECKPOINT_FILE      = Path("checkpoint_prendas.json")
 METADATA_FILE        = Path("trend_metadata_report.json")
 
 VISION_MODEL_NAME    = "gemini-2.5-flash"
-EMBEDDING_MODEL_NAME = "models/embedding-001"
+EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 EXPECTED_DIMS        = 1536
-
-# ── Configuración REST ────────────────────────────────────────────────────────
 
 BACK_URL               = os.environ.get("BACK_URL", "http://dressme-back:8080")
 TREND_DATASET_ENDPOINT = f"{BACK_URL}/internal/trend-dataset/config"
 INTERNAL_JWT_SECRET    = os.environ.get(
     "INTERNAL_JWT_SECRET",
-    os.environ.get(
-        "JWT_SECRET",
-        "dressme-secret-key-change-in-production-minimum-256-bits-required-12345"
-    )
+    os.environ.get("JWT_SECRET", "dressme-secret-key-change-in-production-minimum-256-bits-required-12345")
 )
-INTERNAL_SERVICE_NAME  = "dressme-ai-script"
+INTERNAL_SERVICE_NAME = "dressme-ai-script"
 
-# ── Cliente Gemini (singleton) ────────────────────────────────────────────────
-# Con google-generativeai, se usa genai.configure() una sola vez.
+_client: genai.Client | None = None
 
-_gemini_configured: bool = False
-
-def get_gemini_client():
-    global _gemini_configured
-    if not _gemini_configured:
+def get_client() -> genai.Client:
+    global _client
+    if _client is None:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             logger.error("Falta GEMINI_API_KEY en las variables de entorno.")
             sys.exit(1)
-        genai.configure(api_key=api_key)
-        _gemini_configured = True
+        _client = genai.Client(api_key=api_key)
+    return _client
 
-# ── Utilidades ────────────────────────────────────────────────────────────────
 
 def format_time(seconds: float) -> str:
     return str(datetime.timedelta(seconds=int(seconds)))
@@ -118,7 +87,6 @@ def generate_metadata_report(success_images: int, total_garments: int, status: s
         json.dump(metadata, f, indent=4, ensure_ascii=False)
     logger.info("\n[+] Reporte de metadatos generado en: %s", METADATA_FILE)
 
-# ── Descubrimiento de imágenes ────────────────────────────────────────────────
 
 def discover_images(dataset_path: Path) -> list[Path]:
     if not dataset_path.exists():
@@ -136,55 +104,46 @@ def discover_images(dataset_path: Path) -> list[Path]:
 
     return sorted(images)
 
-# ── Extracción con Gemini Vision ──────────────────────────────────────────────
 
 def extract_garments_metadata(image_path: Path) -> list[str]:
-    """
-    Extrae atributos de las prendas de una imagen usando Gemini Vision.
-    """
-    get_gemini_client()
-    
-    model = genai.GenerativeModel(model_name=VISION_MODEL_NAME)
+    client = get_client()
 
-    prompt = (
-        "Analiza esta imagen de moda e identifica cada prenda de ropa individual. "
-        "Para cada prenda, extrae exactamente estos 5 atributos: categoria, estilo, color, clima y ocasion. "
-        "Devuelve la respuesta estrictamente como un arreglo JSON de objetos. "
-        "Ejemplo: [{'categoria': 'pantalones', 'estilo': 'urbano', 'color': 'azul', 'clima': 'templado', 'ocasion': 'casual'}]"
-    )
-
-    # Leer imagen como bytes
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
     suffix = image_path.suffix.lower()
-    mime_map = {
-        ".jpg":  "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png":  "image/png",
-        ".webp": "image/webp",
-    }
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
     mime_type = mime_map.get(suffix, "image/jpeg")
 
-    response = model.generate_content(
-        [
-            {
-                "mime_type": mime_type,
-                "data": image_bytes
-            },
-            prompt
-        ]
+    prompt = (
+        "Analiza esta imagen de moda e identifica cada prenda de ropa individual. "
+        "Para cada prenda, extrae exactamente estos 5 atributos: categoria, estilo, color, clima y ocasion. "
+        "Devuelve la respuesta UNICAMENTE como un arreglo JSON valido, sin markdown, sin explicaciones. "
+        "Ejemplo: [{\"categoria\": \"pantalones\", \"estilo\": \"urbano\", \"color\": \"azul\", \"clima\": \"templado\", \"ocasion\": \"casual\"}]"
     )
 
-    items = json.loads(response.text)
+    response = client.models.generate_content(
+        model=VISION_MODEL_NAME,
+        contents=[
+            types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            types.Part.from_text(text=prompt),
+        ],
+    )
+
+    raw = response.text or ""
+    cleaned = re.sub(r"```(?:json)?", "", raw).strip()
+    if not cleaned:
+        raise ValueError(f"Gemini devolvio respuesta vacia para {image_path.name}")
+
+    items = json.loads(cleaned)
     descriptions = []
     for item in items:
         text_desc = (
-            f"Categoría: {item.get('categoria', 'n/a')}. "
+            f"Categoria: {item.get('categoria', 'n/a')}. "
             f"Estilo: {item.get('estilo', 'n/a')}. "
             f"Color: {item.get('color', 'n/a')}. "
             f"Clima: {item.get('clima', 'n/a')}. "
-            f"Ocasión: {item.get('ocasion', 'n/a')}."
+            f"Ocasion: {item.get('ocasion', 'n/a')}."
         )
         descriptions.append(text_desc)
     return descriptions
@@ -197,10 +156,7 @@ def extract_with_backoff(img_path: Path, max_retries: int = 3) -> list[str]:
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
                 wait_time = 30 * (attempt + 1)
-                logger.warning(
-                    "  [!] Límite API. Esperando %ds (intento %d/%d)...",
-                    wait_time, attempt + 1, max_retries,
-                )
+                logger.warning("  [!] Limite API. Esperando %ds (intento %d/%d)...", wait_time, attempt + 1, max_retries)
                 time.sleep(wait_time)
             else:
                 logger.error("  [X] Error en %s: %s", img_path.name, e)
@@ -209,27 +165,27 @@ def extract_with_backoff(img_path: Path, max_retries: int = 3) -> list[str]:
 
 
 def get_embedding(text: str) -> list[float] | None:
-    """
-    Genera embedding de texto usando google-generativeai.
-    """
-    get_gemini_client()
+    client = get_client()
     try:
-        response = genai.embed_content(
+        response = client.models.embed_content(
             model=EMBEDDING_MODEL_NAME,
-            content=text,
+            contents=text,
+            config=types.EmbedContentConfig(
+                task_type="SEMANTIC_SIMILARITY",
+                output_dimensionality=EXPECTED_DIMS,
+            ),
         )
-        return response['embedding']
+        return response.embeddings[0].values
     except Exception as e:
         logger.error("  [X] Error al generar embedding: %s", e)
         return None
 
-# ── Pipeline principal ────────────────────────────────────────────────────────
 
 def run_pipeline_resilient(images: list[Path]):
     processed_data = load_checkpoint()
     all_vectors    = []
 
-    logger.info("Imágenes en checkpoint: %d", len(processed_data))
+    logger.info("Imagenes en checkpoint: %d", len(processed_data))
 
     consecutive_failures        = 0
     images_processed_in_session = 0
@@ -250,8 +206,7 @@ def run_pipeline_resilient(images: list[Path]):
             consecutive_failures += 1
             logger.warning("  -> Fallo detectado. Consecutivos: %d/3", consecutive_failures)
             if consecutive_failures >= 3:
-                logger.error("\n[!!!] 3 FALLOS CONSECUTIVOS. Abortando peticiones a la API.")
-                logger.error("Generando vector promedio con los datos obtenidos hasta el momento...")
+                logger.error("\n[!!!] 3 FALLOS CONSECUTIVOS. Abortando.")
                 status_final = "parcial_por_errores"
                 break
             continue
@@ -280,10 +235,10 @@ def run_pipeline_resilient(images: list[Path]):
             i, total_images, img_id, format_time(elapsed), format_time(eta_seconds),
         )
 
-        time.sleep(4.5)  # Throttling: respetar 15 RPM
+        time.sleep(4.5)
 
     if not all_vectors:
-        logger.error("No se recolectaron vectores suficientes para promediar. Abortando.")
+        logger.error("No se recolectaron vectores. Abortando.")
         sys.exit(1)
 
     matrix     = np.array(all_vectors, dtype=np.float32)
@@ -293,7 +248,6 @@ def run_pipeline_resilient(images: list[Path]):
 
     return avg_vector, len(all_vectors)
 
-# ── Persistencia vía REST ─────────────────────────────────────────────────────
 
 def _generate_internal_jwt() -> str:
     now = datetime.datetime.utcnow()
@@ -321,74 +275,41 @@ def save_to_back(vector: np.ndarray, count: int, description: str) -> None:
         "Authorization": f"Bearer {token}",
     }
 
-    logger.info(
-        "\n[+] Enviando vector a dressme-back → %s (imageCount=%d)",
-        TREND_DATASET_ENDPOINT,
-        count,
-    )
+    logger.info("\n[+] Enviando vector a dressme-back -> %s (imageCount=%d)", TREND_DATASET_ENDPOINT, count)
 
     try:
-        response = requests.post(
-            TREND_DATASET_ENDPOINT,
-            data=json.dumps(payload),
-            headers=headers,
-            timeout=30,
-        )
+        response = requests.post(TREND_DATASET_ENDPOINT, data=json.dumps(payload), headers=headers, timeout=30)
         response.raise_for_status()
-
         result = response.json()
-        logger.info(
-            "[+] Vector persistido por dressme-database — id=%s, computedAt=%s",
-            result.get("id"),
-            result.get("computedAt"),
-        )
-
+        logger.info("[+] Vector persistido — id=%s, computedAt=%s", result.get("id"), result.get("computedAt"))
     except requests.exceptions.ConnectionError:
-        logger.error(
-            "[X] No se pudo conectar a dressme-back en %s. ¿Está el servicio corriendo?",
-            TREND_DATASET_ENDPOINT,
-        )
-        raise RuntimeError(f"Conexión rechazada a {TREND_DATASET_ENDPOINT}")
-
+        raise RuntimeError(f"Conexion rechazada a {TREND_DATASET_ENDPOINT}")
     except requests.exceptions.HTTPError as e:
-        logger.error(
-            "[X] dressme-back rechazó la request — status=%d, body=%s",
-            e.response.status_code,
-            e.response.text,
-        )
-        raise RuntimeError(
-            f"Error HTTP {e.response.status_code} al persistir el vector de tendencia"
-        )
-
+        raise RuntimeError(f"Error HTTP {e.response.status_code} al persistir el vector")
     except requests.exceptions.Timeout:
-        logger.error("[X] Timeout esperando respuesta de dressme-back (30s).")
         raise RuntimeError("Timeout al conectar con dressme-back")
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description="Generador Batch de Vector de Tendencia")
-    parser.add_argument("--path", type=str, default="dataset_moda_actual", help="Ruta de imágenes")
-    parser.add_argument("--desc", type=str, default="Tendencia extraída por atributos", help="Descripción del dataset")
+    parser.add_argument("--path", type=str, default="dataset_moda_actual")
+    parser.add_argument("--desc", type=str, default="Tendencia extraida por atributos")
     args = parser.parse_args()
 
-    # Verificar que la API key existe antes de arrancar
     if not os.environ.get("GEMINI_API_KEY"):
         logger.error("Falta GEMINI_API_KEY en las variables de entorno.")
         sys.exit(1)
 
-    # Inicializar el cliente (valida la key al arrancar)
-    get_gemini_client()
+    get_client()
 
     logger.info("=== INICIANDO PROCESAMIENTO BATCH ===")
     logger.info("Dataset  : %s", args.path)
     logger.info("Backend  : %s", TREND_DATASET_ENDPOINT)
 
     image_paths = discover_images(Path(args.path))
-    logger.info("Total de imágenes a procesar: %d\n", len(image_paths))
+    logger.info("Total de imagenes a procesar: %d\n", len(image_paths))
 
     avg_vec, total_items = run_pipeline_resilient(image_paths)
-
     save_to_back(avg_vec, total_items, args.desc)
 
     logger.info("\n=== PROCESO COMPLETADO ===")
