@@ -30,8 +30,7 @@ from pathlib import Path
 
 import numpy as np
 import requests
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from jose import jwt
 from PIL import Image
 from dotenv import load_dotenv, find_dotenv
@@ -54,7 +53,7 @@ CHECKPOINT_FILE      = Path("checkpoint_prendas.json")
 METADATA_FILE        = Path("trend_metadata_report.json")
 
 VISION_MODEL_NAME    = "gemini-2.5-flash"
-EMBEDDING_MODEL_NAME = "gemini-embedding-001"   # sin el prefijo "models/" en la nueva SDK
+EMBEDDING_MODEL_NAME = "models/embedding-001"
 EXPECTED_DIMS        = 1536
 
 # ── Configuración REST ────────────────────────────────────────────────────────
@@ -71,20 +70,19 @@ INTERNAL_JWT_SECRET    = os.environ.get(
 INTERNAL_SERVICE_NAME  = "dressme-ai-script"
 
 # ── Cliente Gemini (singleton) ────────────────────────────────────────────────
-# En google-genai 2.7.0 se instancia un Client con la api_key.
-# Ya no existe genai.configure() ni genai.GenerativeModel().
+# Con google-generativeai, se usa genai.configure() una sola vez.
 
-_gemini_client: genai.Client | None = None
+_gemini_configured: bool = False
 
-def get_gemini_client() -> genai.Client:
-    global _gemini_client
-    if _gemini_client is None:
+def get_gemini_client():
+    global _gemini_configured
+    if not _gemini_configured:
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
             logger.error("Falta GEMINI_API_KEY en las variables de entorno.")
             sys.exit(1)
-        _gemini_client = genai.Client(api_key=api_key)
-    return _gemini_client
+        genai.configure(api_key=api_key)
+        _gemini_configured = True
 
 # ── Utilidades ────────────────────────────────────────────────────────────────
 
@@ -143,9 +141,10 @@ def discover_images(dataset_path: Path) -> list[Path]:
 def extract_garments_metadata(image_path: Path) -> list[str]:
     """
     Extrae atributos de las prendas de una imagen usando Gemini Vision.
-    API nueva: client.models.generate_content()
     """
-    client = get_gemini_client()
+    get_gemini_client()
+    
+    model = genai.GenerativeModel(model_name=VISION_MODEL_NAME)
 
     prompt = (
         "Analiza esta imagen de moda e identifica cada prenda de ropa individual. "
@@ -154,7 +153,7 @@ def extract_garments_metadata(image_path: Path) -> list[str]:
         "Ejemplo: [{'categoria': 'pantalones', 'estilo': 'urbano', 'color': 'azul', 'clima': 'templado', 'ocasion': 'casual'}]"
     )
 
-    # Leer imagen como bytes y pasarla como Part inline
+    # Leer imagen como bytes
     with open(image_path, "rb") as f:
         image_bytes = f.read()
 
@@ -167,25 +166,14 @@ def extract_garments_metadata(image_path: Path) -> list[str]:
     }
     mime_type = mime_map.get(suffix, "image/jpeg")
 
-    response = client.models.generate_content(
-        model=VISION_MODEL_NAME,
-        contents=[
-            types.Content(
-                role="user",
-                parts=[
-                    types.Part(
-                        inline_data=types.Blob(
-                            mime_type=mime_type,
-                            data=image_bytes,
-                        )
-                    ),
-                    types.Part(text=prompt),
-                ],
-            )
-        ],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-        ),
+    response = model.generate_content(
+        [
+            {
+                "mime_type": mime_type,
+                "data": image_bytes
+            },
+            prompt
+        ]
     )
 
     items = json.loads(response.text)
@@ -222,20 +210,15 @@ def extract_with_backoff(img_path: Path, max_retries: int = 3) -> list[str]:
 
 def get_embedding(text: str) -> list[float] | None:
     """
-    Genera embedding de texto usando la nueva SDK google-genai 2.7.0.
-    API nueva: client.models.embed_content()
+    Genera embedding de texto usando google-generativeai.
     """
-    client = get_gemini_client()
+    get_gemini_client()
     try:
-        response = client.models.embed_content(
+        response = genai.embed_content(
             model=EMBEDDING_MODEL_NAME,
-            contents=text,
-            config=types.EmbedContentConfig(
-                task_type="SEMANTIC_SIMILARITY",
-                output_dimensionality=EXPECTED_DIMS,
-            ),
+            content=text,
         )
-        return response.embeddings[0].values
+        return response['embedding']
     except Exception as e:
         logger.error("  [X] Error al generar embedding: %s", e)
         return None

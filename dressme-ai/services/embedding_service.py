@@ -1,7 +1,7 @@
 """
 services/embedding_service.py
 ──────────────────────────────
-Genera embeddings de texto usando el SDK oficial de Google Gen AI (google-genai).
+Genera embeddings de texto usando el SDK oficial de Google Gen AI (google-generativeai).
 
 Responsabilidades:
   - Llamar a la API de Gemini en modo batch (una sola llamada para N tarjetas)
@@ -12,8 +12,7 @@ Responsabilidades:
 
 import logging
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 from schemas.onboarding import (
     GenerateEmbeddingsRequest,
@@ -23,7 +22,7 @@ from schemas.onboarding import (
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_MODEL = "models/embedding-001"
 EXPECTED_DIMENSIONS = 1536
 
 
@@ -31,9 +30,9 @@ class EmbeddingService:
     def __init__(self, api_key: str):
         """
         Recibe la API key por inyección desde dependencies.py.
-        Instancia el cliente del SDK oficial de Gemini.
+        Configura el cliente del SDK oficial de Gemini.
         """
-        self.client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
 
     def generate_for_style_cards(
         self, request: GenerateEmbeddingsRequest
@@ -53,31 +52,29 @@ class EmbeddingService:
         texts = [card.semantic_description for card in request.style_cards]
 
         try:
-            response = self.client.models.embed_content(
+            response = genai.embed_content(
                 model=EMBEDDING_MODEL,
-                contents=texts,
-                config=types.EmbedContentConfig(
-                    task_type="SEMANTIC_SIMILARITY",
-                    output_dimensionality=EXPECTED_DIMENSIONS,
-                ),
+                content=texts,
+                task_type="SEMANTIC_SIMILARITY",
             )
         except Exception as exc:
             logger.exception("EmbeddingService: error llamando a Gemini")
             raise RuntimeError(f"Error generando embeddings con Gemini: {exc}") from exc
 
-        if not response.embeddings:
+        if not response.get("embedding"):
             raise ValueError("Gemini no devolvió embeddings.")
 
-        if len(response.embeddings) != len(request.style_cards):
+        embeddings_list = response.get("embedding", [])
+        if len(embeddings_list) != len(request.style_cards):
             raise ValueError(
-                f"Gemini devolvió {len(response.embeddings)} embeddings pero se enviaron "
+                f"Gemini devolvió {len(embeddings_list)} embeddings pero se enviaron "
                 f"{len(request.style_cards)} textos. La respuesta está incompleta."
             )
 
         results: list[StyleCardEmbeddingResult] = []
 
-        for card, embedding_item in zip(request.style_cards, response.embeddings):
-            vector = embedding_item.values
+        for card, embedding_vector in zip(request.style_cards, embeddings_list):
+            vector = embedding_vector
 
             if vector is None:
                 raise ValueError(f"El embedding de la tarjeta '{card.id}' vino vacío.")

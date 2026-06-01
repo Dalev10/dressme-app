@@ -88,9 +88,6 @@ logger.info(
 def health_check():
     return {
         "service": settings.app_name,
-        "status":  "active",
-        "env":     settings.app_env,
-    }
         "status": "active",
         "env": settings.app_env,
     }

@@ -50,3 +50,9 @@ spring:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+logging:
+  level:
+    org.flywaydb: DEBUG
+    org.flywaydb.core: DEBUG
+    org.flywaydb.core.internal: DEBUG
