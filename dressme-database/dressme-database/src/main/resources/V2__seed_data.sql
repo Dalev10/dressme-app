@@ -1,4 +1,24 @@
 -- =============================================================================
+-- V2__seed_data.sql
+-- Datos iniciales obligatorios — migrado desde data.sql a Flyway.
+--
+-- Contiene exactamente los mismos INSERT que el data.sql original,
+-- con los UUIDs y valores calibrados del equipo. ON CONFLICT DO NOTHING
+-- garantiza idempotencia si Flyway re-intenta en caso de error parcial.
+--
+-- Orden de inserción respeta FK constraints:
+--   1. tbl_style_cards (sin dependencias)
+--   2. tbl_colors
+--   3. tbl_color_compatibility (FK → tbl_colors)
+--   4. tbl_providers
+--   5. tbl_clothing_categories (autorreferenciada, padres antes que hijos)
+--   6. tbl_occasions
+--   7. tbl_weather
+--   8. tbl_styles
+--   9. tbl_style_card_mappings (FK → tbl_style_cards + tbl_styles)
+-- =============================================================================
+
+-- =============================================================================
 -- SEED: tbl_style_cards
 -- 12 tarjetas de onboarding para el flujo de caracterización de usuario.
 --
