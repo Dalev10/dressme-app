@@ -11,8 +11,6 @@ numpy==1.26.4
 Pillow==10.2.0
 # ── Utilidades ─────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
-# ── Conexión a DB (solo para TrendScoreService — leer avg_vector) ─────────────
-psycopg2-binary==2.9.9
-# ── HTTP y autenticación (solo para compute_trend_vector.py) ──────────────────
+# ── HTTP ─────────────────────────────────────────────────────────────────────
 requests==2.31.0
 python-jose[cryptography]==3.3.0

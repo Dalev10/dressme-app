@@ -7,19 +7,19 @@ contra el vector promedio del dataset de moda actual.
 Responsabilidades:
   1. Recibir los embeddings de las prendas del outfit.
   2. Calcular el outfit_vector como promedio de esos embeddings.
-  3. Obtener el avg_vector del dataset desde PostgreSQL
-     (tabla tbl_trend_dataset_config, fila más reciente).
+  3. Obtener el avg_vector del dataset desde dressme-database
+     vía HTTP endpoint GET /internal/trend-dataset/config/latest.
   4. Calcular la similitud coseno entre ambos vectores.
   5. Normalizar el resultado a [0, 1] y devolverlo.
 
-El acceso a DB se hace con psycopg2 mediante un pool de conexiones
-que se inyecta en el constructor, igual que el resto del patrón del proyecto.
+Acceso a datos centralizado en dressme-database siguiendo la arquitectura
+de microservicios. Solo HTTP, sin conexiones directas a PostgreSQL.
 """
 
 import logging
+import os
 import numpy as np
-import psycopg2
-import psycopg2.pool
+import requests
 from schemas.trend import TrendScoreRequest, TrendScoreResponse
 
 logger = logging.getLogger(__name__)
@@ -27,15 +27,22 @@ logger = logging.getLogger(__name__)
 # Dimensión esperada para cada embedding de prenda
 EXPECTED_DIMS = 1536
 
+# URL base de dressme-database para leer configuración de dataset
+DATABASE_SERVICE_URL = os.environ.get(
+    "DATABASE_SERVICE_URL",
+    "http://dressme-database:8080"
+)
+LATEST_DATASET_ENDPOINT = f"{DATABASE_SERVICE_URL}/internal/trend-dataset/config/latest"
+
 
 class TrendScoreService:
 
-    def __init__(self, db_pool: psycopg2.pool.ThreadedConnectionPool):
+    def __init__(self):
         """
-        db_pool → pool de conexiones a PostgreSQL.
-        Se inyecta desde dependencies.py al arrancar la aplicación.
+        Sin inyección de BD. El servicio realiza todas las consultas
+        vía HTTP a dressme-database.
         """
-        self._db_pool = db_pool
+        pass
 
     # ─── API pública ───────────────────────────────────────────────────────────
 
@@ -105,37 +112,63 @@ class TrendScoreService:
 
     def _load_latest_dataset_vector(self) -> tuple[np.ndarray, int] | None:
         """
-        Carga el avg_vector más reciente de tbl_trend_dataset_config.
+        Carga el avg_vector más reciente desde dressme-database
+        vía HTTP GET /internal/trend-dataset/config/latest.
 
-        Devuelve (avg_vector: ndarray, image_count: int) o None si la tabla
-        está vacía (dataset aún no procesado).
+        Devuelve (avg_vector: ndarray, image_count: int) o None si no hay
+        data en la BD (dataset aún no procesado).
         """
-        conn = self._db_pool.getconn()
         try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT avg_vector::text, image_count
-                      FROM tbl_trend_dataset_config
-                     ORDER BY computed_at DESC
-                     LIMIT 1
-                    """
+            response = requests.get(
+                LATEST_DATASET_ENDPOINT,
+                timeout=10,
+            )
+        except requests.RequestException as e:
+            logger.error(
+                "TrendScoreService: Error conectando a dressme-database en %s: %s",
+                LATEST_DATASET_ENDPOINT,
+                e,
+            )
+            return None
+
+        if response.status_code == 404:
+            logger.warning(
+                "TrendScoreService: No hay vector de dataset en dressme-database"
+            )
+            return None
+
+        if response.status_code != 200:
+            logger.error(
+                "TrendScoreService: dressme-database respondió con status=%d: %s",
+                response.status_code,
+                response.text,
+            )
+            return None
+
+        try:
+            data = response.json()
+            # Esperamos que la respuesta incluya avg_vector (como lista de floats)
+            # y dataset_images o imageCount con el número de imágenes.
+            # Nota: el modelo Java devuelve: id, imageCount, modelUsed, description, computedAt
+            # pero NO devuelve directamente avgVector. Necesitamos un cambio en la respuesta.
+            # Por ahora asumimos que la API devuelve el vector en algún formato.
+            image_count = data.get("imageCount", 0)
+            # Aquí necesitarías que dressme-database devuelva también el avg_vector
+            # en la respuesta para poder recuperarlo. Eso requiere cambio en el DTO.
+            avg_vector = data.get("avgVector")  # Esperando que esté en la respuesta
+            if not avg_vector:
+                logger.error(
+                    "TrendScoreService: Respuesta de dressme-database no incluye avgVector"
                 )
-                row = cur.fetchone()
-
-            if row is None:
                 return None
-
-            # pgvector devuelve el vector como string '[f1,f2,...]'
-            # Lo parseamos a ndarray float32.
-            vector_str, image_count = row
-            values = [float(x) for x in vector_str.strip("[]").split(",")]
-            avg_vector = np.array(values, dtype=np.float32)
-
-            return avg_vector, image_count
-
-        finally:
-            self._db_pool.putconn(conn)
+            values = np.array(avg_vector, dtype=np.float32)
+            return values, image_count
+        except (KeyError, ValueError) as e:
+            logger.error(
+                "TrendScoreService: Error parseando respuesta de dressme-database: %s",
+                e,
+            )
+            return None
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

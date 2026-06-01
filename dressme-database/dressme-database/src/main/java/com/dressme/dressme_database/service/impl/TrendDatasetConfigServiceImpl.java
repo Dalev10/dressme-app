@@ -9,6 +9,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+ 
+import java.util.List;
  
 @Service
 @RequiredArgsConstructor
@@ -41,13 +45,55 @@ public class TrendDatasetConfigServiceImpl implements TrendDatasetConfigService 
             saved.getId(),
             saved.getComputedAt()
         );
- 
+
+        List<Float> vectorAsList = new java.util.ArrayList<>();
+        for (float f : saved.getAvgVector()) {
+            vectorAsList.add(f);
+        }
+
         return new TrendDatasetConfigResponse(
             saved.getId(),
+            vectorAsList,
             saved.getImageCount(),
             saved.getModelUsed(),
             saved.getDescription(),
             saved.getComputedAt()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TrendDatasetConfigResponse getLatest() {
+        log.info("TrendDatasetConfig: Buscando el vector de dataset más reciente");
+
+        TrendDatasetConfig latest = repository.findLatest()
+            .orElseThrow(() -> {
+                log.warn("TrendDatasetConfig: No hay vector de dataset disponible");
+                return new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "No hay vector de dataset disponible. Ejecuta el script de cómputo primero."
+                );
+            });
+
+        log.info(
+            "TrendDatasetConfig: Vector encontrado — id={} imageCount={} computedAt={}",
+            latest.getId(),
+            latest.getImageCount(),
+            latest.getComputedAt()
+        );
+
+        List<Float> vectorAsList = new java.util.ArrayList<>();
+        for (float f : latest.getAvgVector()) {
+            vectorAsList.add(f);
+        }
+
+        return new TrendDatasetConfigResponse(
+            latest.getId(),
+            vectorAsList,
+            latest.getImageCount(),
+            latest.getModelUsed(),
+            latest.getDescription(),
+            latest.getComputedAt()
         );
     }
 }
