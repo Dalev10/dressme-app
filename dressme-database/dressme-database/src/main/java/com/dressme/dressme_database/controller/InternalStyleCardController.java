@@ -65,4 +65,10 @@ public class InternalStyleCardController {
         styleCardService.saveSelections(request);
         return ResponseEntity.noContent().build(); // 204
     }
+
+    @GetMapping("/{userId}/style-card-ids")
+    public ResponseEntity<List<UUID>> getSelectedStyleCardIds(@PathVariable UUID userId) {
+        log.info("Database: Solicitando style cards seleccionadas para usuario {}", userId);
+        return ResponseEntity.ok(styleCardService.getSelectedStyleCardIds(userId));
+    }
 }

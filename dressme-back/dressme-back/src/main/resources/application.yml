@@ -30,6 +30,12 @@ app:
     ai-url: ${AI_SERVICE_URL:http://dressme-ai:8000}
   security:
     jwt-secret: ${JWT_SECRET:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}
+  score-engine:
+    weights:
+      color: ${SCORE_WEIGHT_COLOR:40.0}
+      dresscode: ${SCORE_WEIGHT_DRESSCODE:20.0}
+      taste: ${SCORE_WEIGHT_TASTE:20.0}
+      trend: ${SCORE_WEIGHT_TREND:20.0}
 
 google:
   oauth:

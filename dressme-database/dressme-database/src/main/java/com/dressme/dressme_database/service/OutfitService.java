@@ -1,12 +1,10 @@
 package com.dressme.dressme_database.service;
-
 import com.dressme.dressme_database.schema.dto.*;
-
 import java.util.List;
 import java.util.UUID;
 
 public interface OutfitService {
-
+    OutfitDressCodeResponse getDressCode(UUID outfitId);
     /**
      * Persiste un outfit generado por el motor de recomendación.
      * @Transactional: crea Outfit + ClothingOutfits + OutfitAiAudit en una sola unidad.

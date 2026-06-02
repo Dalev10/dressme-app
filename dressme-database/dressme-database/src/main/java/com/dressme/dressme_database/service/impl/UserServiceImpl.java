@@ -97,6 +97,10 @@ public class UserServiceImpl implements UserService {
                         "Usuario no encontrado con ID: " + userId
                 ));
 
+        float[] tasteVector = userTasteProfileRepository.findByUserId(userId)
+                .map(UserTasteProfile::getTasteVector)
+                .orElse(null);
+
         boolean calibrated = userTasteProfileRepository.findByUserId(userId)
                 .map(UserTasteProfile::isCalibrated)
                 .orElse(false);
@@ -106,6 +110,7 @@ public class UserServiceImpl implements UserService {
                 .email(user.getEmail())
                 .displayName(user.getDisplayName())
                 .profilePicture(user.getProfilePicture())
+                .tasteVector(tasteVector)
                 .isCalibrated(calibrated)
                 .build();
     }
