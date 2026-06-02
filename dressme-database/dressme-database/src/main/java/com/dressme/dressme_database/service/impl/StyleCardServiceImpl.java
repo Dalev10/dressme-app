@@ -94,6 +94,15 @@ public class StyleCardServiceImpl implements StyleCardService {
         selectionRepository.saveAll(entities);
         log.info("StyleCardService: {} selecciones guardadas correctamente", entities.size());
     }
+
+        @Override
+        @Transactional(readOnly = true)
+        public List<UUID> getSelectedStyleCardIds(UUID userId) {
+                log.info("StyleCardService: Consultando style cards seleccionadas para usuario {}", userId);
+                return selectionRepository.findByUserId(userId).stream()
+                                .map(selection -> selection.getStyleCard().getId())
+                                .toList();
+        }
  
     // ── Mapper privado ────────────────────────────────────────────────────────
  

@@ -20,4 +20,7 @@ public interface DatabaseOnboardingClient {
 
     @PostMapping("/internal/onboarding/selections")
     void saveSelections(@RequestBody DatabaseOnboardingSelectionRequest request);
+
+    @GetMapping("/internal/onboarding/{userId}/style-card-ids")
+    List<UUID> getSelectedStyleCardIds(@PathVariable("userId") UUID userId);
 }

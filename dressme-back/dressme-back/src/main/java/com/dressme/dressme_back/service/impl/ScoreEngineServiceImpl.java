@@ -9,6 +9,7 @@ import com.dressme.dressme_back.service.ColorScoreService;
 import com.dressme.dressme_back.service.ScoreEngineService;
 import com.dressme.dressme_back.service.TrendScoreService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -18,10 +19,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ScoreEngineServiceImpl implements ScoreEngineService {
 
-    private static final double COLOR_WEIGHT     = 40.0;
-    private static final double DRESSCODE_WEIGHT = 20.0;
-    private static final double TASTE_WEIGHT     = 20.0;
-    private static final double TREND_WEIGHT     = 20.0;
+    @Value("${app.score-engine.weights.color:40.0}")
+    private double colorBaseWeight;
+
+    @Value("${app.score-engine.weights.dresscode:20.0}")
+    private double dresscodeBaseWeight;
+
+    @Value("${app.score-engine.weights.taste:20.0}")
+    private double tasteBaseWeight;
+
+    @Value("${app.score-engine.weights.trend:20.0}")
+    private double trendBaseWeight;
 
     private final ColorScoreService colorScoreService;
     private final TrendScoreService trendScoreService;
@@ -35,10 +43,10 @@ public class ScoreEngineServiceImpl implements ScoreEngineService {
             .computeTrendScore(request.outfitEmbeddings());
         boolean trendApplies = trendResponse.applies();
 
-        double colorWeight     = COLOR_WEIGHT;
-        double dresscodeWeight = DRESSCODE_WEIGHT;
-        double tasteWeight     = TASTE_WEIGHT;
-        double trendWeight     = TREND_WEIGHT;
+        double colorWeight     = colorBaseWeight;
+        double dresscodeWeight = dresscodeBaseWeight;
+        double tasteWeight     = tasteBaseWeight;
+        double trendWeight     = trendBaseWeight;
 
         if (!colorApplies) {
             double redistributed = colorWeight / 3.0;

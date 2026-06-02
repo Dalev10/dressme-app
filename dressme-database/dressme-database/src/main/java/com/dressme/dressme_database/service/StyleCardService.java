@@ -23,4 +23,7 @@ public interface StyleCardService {
      * Si el usuario ya tenía selecciones previas, las reemplaza (re-calibración).
      */
     void saveSelections(OnboardingSelectionRequest request);
+
+    /** Devuelve los IDs de style cards seleccionadas por un usuario. */
+    List<UUID> getSelectedStyleCardIds(UUID userId);
 }

@@ -2,6 +2,7 @@ package com.dressme.dressme_database.controller;
 
 import com.dressme.dressme_database.schema.dto.*;
 import com.dressme.dressme_database.service.ClothingService;
+import com.dressme.dressme_database.service.OutfitService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ import java.util.UUID;
 public class InternalWardrobeController {
 
     private final ClothingService clothingService;
+    private final OutfitService outfitService;
 
     // ── Paso 1: Registro inicial ──────────────────────────────────────────────
 
@@ -121,6 +123,14 @@ public class InternalWardrobeController {
     public ResponseEntity<CatalogDTO> getCatalog() {
         log.info("DB-Wardrobe: GET /catalog");
         return ResponseEntity.ok(clothingService.getCatalog());
+    }
+
+
+    @GetMapping("/{outfitId}/dress-code")
+    public ResponseEntity<OutfitDressCodeResponse> getDressCode(
+            @PathVariable UUID outfitId) {
+        log.info("DB-Wardrobe: GET /{}/dress-code", outfitId);
+        return ResponseEntity.ok(outfitService.getDressCode(outfitId));
     }
 
 
