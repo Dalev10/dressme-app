@@ -13,6 +13,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import com.dressme.dressme_gateway.infra.security.JwtTokenProvider;
+import org.springframework.http.HttpHeaders;
 
 import java.util.List;
 import java.util.UUID;
@@ -35,12 +37,16 @@ import java.util.UUID;
 public class WardrobeController {
 
     private final RestClient backClient;
+    private final JwtTokenProvider jwtTokenProvider;
 
     public WardrobeController(
             RestClient.Builder restClientBuilder,
+            JwtTokenProvider jwtTokenProvider,
             @Value("${app.services.backend-url}") String backendUrl
+            
     ) {
         this.backClient = restClientBuilder.baseUrl(backendUrl).build();
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     /**
@@ -64,9 +70,12 @@ public class WardrobeController {
         body.add("userId", userId.toString());
         body.add("image", image.getResource());
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         ClothingItemResponse response = backClient.post()
                 .uri("/internal/wardrobe/upload")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .body(body)
                 .retrieve()
                 .body(ClothingItemResponse.class);
@@ -86,8 +95,11 @@ public class WardrobeController {
     public ResponseEntity<CatalogDTO> getCatalog() {
         log.info("Gateway-Wardrobe: GET /catalog");
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         CatalogDTO catalog = backClient.get()
                 .uri("/internal/wardrobe/catalog")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .retrieve()
                 .body(CatalogDTO.class);
 
@@ -100,8 +112,11 @@ public class WardrobeController {
 
         log.info("Gateway-Wardrobe: GET /catalog/edit");
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         WardrobeEditCatalogDTO catalog = backClient.get()
                 .uri("/internal/wardrobe/catalog/edit")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .retrieve()
                 .body(WardrobeEditCatalogDTO.class);
 
@@ -124,8 +139,11 @@ public class WardrobeController {
 
         log.info("Gateway-Wardrobe: GET /list para usuario {}", userId);
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         List<ClothingItemResponse> items = backClient.get()
                 .uri("/internal/wardrobe/user/{userId}", userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<ClothingItemResponse>>() {});
 
@@ -146,8 +164,11 @@ public class WardrobeController {
 
         log.info("Gateway-Wardrobe: GET /{}", clothingId);
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         ClothingDetailResponse detail = backClient.get()
                 .uri("/internal/wardrobe/{clothingId}", clothingId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .retrieve()
                 .body(ClothingDetailResponse.class);
 
@@ -170,9 +191,12 @@ public class WardrobeController {
 
         log.info("Gateway-Wardrobe: PATCH /{} — usuario {}", clothingId, userId);
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         ClothingDetailResponse updated = backClient.patch()
                 .uri("/internal/wardrobe/{clothingId}?userId={userId}",
                         clothingId, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .body(request)
                 .retrieve()
                 .body(ClothingDetailResponse.class);
@@ -194,9 +218,12 @@ public class WardrobeController {
 
         log.info("Gateway-Wardrobe: DELETE /{} — usuario {}", clothingId, userId);
 
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
         backClient.delete()
                 .uri("/internal/wardrobe/{clothingId}?userId={userId}",
                         clothingId, userId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
                 .retrieve()
                 .toBodilessEntity();
 
