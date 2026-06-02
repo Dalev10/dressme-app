@@ -149,13 +149,13 @@ def extract_garments_metadata(image_path: Path) -> list[str]:
     return descriptions
 
 
-def extract_with_backoff(img_path: Path, max_retries: int = 3) -> list[str]:
+def extract_with_backoff(img_path: Path, max_retries: int = 5) -> list[str]:
     for attempt in range(max_retries):
         try:
             return extract_garments_metadata(img_path)
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
-                wait_time = 30 * (attempt + 1)
+                wait_time = 5 * (attempt + 1)
                 logger.warning("  [!] Limite API. Esperando %ds (intento %d/%d)...", wait_time, attempt + 1, max_retries)
                 time.sleep(wait_time)
             else:
@@ -235,7 +235,7 @@ def run_pipeline_resilient(images: list[Path]):
             i, total_images, img_id, format_time(elapsed), format_time(eta_seconds),
         )
 
-        time.sleep(4.5)
+        time.sleep(0.5)
 
     if not all_vectors:
         logger.error("No se recolectaron vectores. Abortando.")
