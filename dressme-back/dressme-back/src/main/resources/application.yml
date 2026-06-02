@@ -30,6 +30,8 @@ app:
     ai-url: ${AI_SERVICE_URL:http://dressme-ai:8000}
   security:
     jwt-secret: ${JWT_SECRET:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}
+  cors:
+    allowed-origin: ${ALLOWED_ORIGIN:}
   score-engine:
     weights:
       color: ${SCORE_WEIGHT_COLOR:40.0}

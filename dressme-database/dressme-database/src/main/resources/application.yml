@@ -4,7 +4,7 @@ spring:
   application:
     name: dressme-database
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE:disable}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
   flyway:
@@ -13,7 +13,7 @@ spring:
     baseline-on-migrate: true
     baseline-version: 0
     validate-on-migrate: true
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE:disable}
     user: ${DB_USER}
     password: ${DB_PASSWORD}
   jpa:

@@ -24,8 +24,8 @@ Diferencia con EmbeddingService (onboarding):
 
 import logging
 
-import google.generativeai as genai
-from google.api_core.exceptions import GoogleAPIError, ResourceExhausted, Unauthenticated
+from google import genai
+from google.genai import types
 
 from schemas.outfit import ClothingEmbeddingRequest, ClothingEmbeddingResponse
 
@@ -33,13 +33,9 @@ logger = logging.getLogger(__name__)
 
 # ── Constantes ────────────────────────────────────────────────────────────────
 
-EMBEDDING_MODEL      = "models/gemini-embedding-001"
+EMBEDDING_MODEL      = "gemini-embedding-001"
 EXPECTED_DIMENSIONS  = 1536
 
-# task_type SEMANTIC_SIMILARITY optimiza los vectores para comparar similitud
-# entre textos — exactamente lo que se necesita para:
-#   - taste_score:    coseno(outfit_vector, taste_vector)
-#   - dresscode_score: coseno(outfit_vector, dressCode_embedding)
 TASK_TYPE = "SEMANTIC_SIMILARITY"
 
 
@@ -49,11 +45,10 @@ class EmbeddingClothingService:
 
     Constructor:
       api_key → str, inyectado desde settings via dependencies.py.
-                Configura el cliente de Gemini una sola vez al construir el servicio.
     """
 
     def __init__(self, api_key: str):
-        genai.configure(api_key=api_key)
+        self._client = genai.Client(api_key=api_key)
         logger.info(
             "EmbeddingClothingService: Inicializado con modelo %s (%d dims)",
             EMBEDDING_MODEL,
@@ -108,30 +103,22 @@ class EmbeddingClothingService:
 
         # ── Llamada batch a Gemini ────────────────────────────────────────────
         try:
-            result = genai.embed_content(
+            response = self._client.models.embed_content(
                 model=EMBEDDING_MODEL,
-                content=texts,
-                task_type=TASK_TYPE,
-                output_dimensionality=EXPECTED_DIMENSIONS,
+                contents=texts,
+                config=types.EmbedContentConfig(
+                    task_type=TASK_TYPE,
+                    output_dimensionality=EXPECTED_DIMENSIONS,
+                ),
             )
-        except ResourceExhausted as e:
+        except Exception as e:
             logger.error(
-                "EmbeddingClothingService: Cuota de Gemini agotada — %s", e
-            )
-            raise
-        except Unauthenticated as e:
-            logger.error(
-                "EmbeddingClothingService: API key de Gemini inválida — %s", e
-            )
-            raise
-        except GoogleAPIError as e:
-            logger.error(
-                "EmbeddingClothingService: Error en la API de Gemini — %s", e
+                "EmbeddingClothingService: Error llamando a Gemini — %s", e
             )
             raise
 
         # ── Validación de la respuesta ────────────────────────────────────────
-        embeddings_raw: list[list[float]] = result["embedding"]
+        embeddings_raw: list[list[float]] = [emb.values for emb in response.embeddings]
 
         if len(embeddings_raw) != len(requests):
             raise ValueError(
