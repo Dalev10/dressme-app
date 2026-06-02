@@ -1,10 +1,5 @@
 """
 services/wardrobe_service.py
-─────────────────────────────
-Orquestador del análisis de prendas usando Gemini Vision.
-
-Importaciones:
-  - schemas.wardrobe  → CatalogData, VisionAnalysisRequest/Response, DetectedColorHSL
 """
 
 import base64
@@ -12,11 +7,11 @@ import json
 import logging
 import re
 from decimal import Decimal
-from pathlib import Path
 from uuid import UUID
 
-import google.generativeai as genai
 import requests
+from google import genai
+from google.genai import types
 
 from schemas.wardrobe import (
     CatalogData,
@@ -32,29 +27,12 @@ GEMINI_VISION_MODEL = "gemini-2.5-flash"
 
 
 class WardrobeAnalysisService:
-    """
-    Analiza imágenes de prendas con Gemini Vision y mapea el resultado
-    al catálogo de dressme en una sola llamada a la API.
-
-    Constructor:
-      api_key  → str,             inyectado desde settings via dependencies.py
-      catalog  → CatalogProvider, inyectado via dependencies.py
-                 (WardrobeAnalysisService no sabe qué implementación es)
-    """
-
     def __init__(self, api_key: str, catalog: CatalogProvider):
-        genai.configure(api_key=api_key)
-        self._model   = genai.GenerativeModel(model_name=GEMINI_VISION_MODEL)
+        self._client = genai.Client(api_key=api_key)
         self._catalog = catalog
         logger.info("WardrobeAnalysisService: Inicializado con modelo %s", GEMINI_VISION_MODEL)
 
     def analyze(self, request: VisionAnalysisRequest) -> VisionAnalysisResponse:
-        """
-        Analiza la prenda y devuelve su clasificación completa.
-
-        Fallback: si Gemini falla, la prenda se asigna a "Uncategorized"
-        con confidence_score=0.0. El usuario puede corregirla manualmente.
-        """
         logger.info(
             "WardrobeAnalysisService: Analizando prenda %s — url=%s",
             request.clothing_id, request.image_url,
@@ -73,51 +51,33 @@ class WardrobeAnalysisService:
             )
             return self._build_uncategorized_response(request.clothing_id, catalog)
 
-    # ── Gemini Vision ─────────────────────────────────────────────────────────
-
     def _call_gemini(self, image_url: str, catalog: CatalogData) -> str:
-        """
-        Analiza la imagen usando Gemini Vision con base64 inline data.
-        
-        Proceso:
-          1. Descargar la imagen desde la URL (interna a la red Docker)
-          2. Convertir a base64
-          3. Detectar el tipo MIME
-          4. Llamar a Gemini con inlineData
-        """
         logger.info("WardrobeAnalysisService: Descargando imagen desde %s", image_url)
         response = requests.get(image_url, timeout=30)
         response.raise_for_status()
-        
-        # Detectar el tipo MIME basado en la extensión
-        mime_type = "image/jpeg"  # por defecto
+
+        mime_type = "image/jpeg"
         if image_url.lower().endswith(".png"):
             mime_type = "image/png"
         elif image_url.lower().endswith(".webp"):
             mime_type = "image/webp"
         elif image_url.lower().endswith(".gif"):
             mime_type = "image/gif"
-        
-        # Convertir la imagen a base64
+
         image_base64 = base64.standard_b64encode(response.content).decode("utf-8")
         logger.info(
-            "WardrobeAnalysisService: Imagen descargada y convertida a base64 (%d bytes, tipo: %s)",
+            "WardrobeAnalysisService: Imagen descargada (%d bytes, tipo: %s)",
             len(response.content), mime_type
         )
-        
-        # Llamar a Gemini con inlineData
-        gemini_response = self._model.generate_content(
-            contents=[{
-                "parts": [
-                    {"text": self._build_prompt(catalog)},
-                    {"inline_data": {
-                        "mime_type": mime_type,
-                        "data": image_base64
-                    }},
-                ]
-            }]
+
+        gemini_response = self._client.models.generate_content(
+            model=GEMINI_VISION_MODEL,
+            contents=[
+                types.Part.from_text(text=self._build_prompt(catalog)),
+                types.Part.from_bytes(data=base64.b64decode(image_base64), mime_type=mime_type),
+            ],
         )
-        
+
         return gemini_response.text
 
     def _build_prompt(self, catalog: CatalogData) -> str:
@@ -168,8 +128,6 @@ REQUIRED JSON FORMAT:
   "confidence": <float 0.0-1.0>
 }}"""
 
-    # ── Parseo ────────────────────────────────────────────────────────────────
-
     def _parse_response(self, raw_text: str) -> dict:
         cleaned = re.sub(r"```(?:json)?", "", raw_text).strip()
         try:
@@ -186,27 +144,25 @@ REQUIRED JSON FORMAT:
             raise ValueError(f"Gemini omitió campos del color: {missing_color}")
 
         for key in ("category_id", "style_id", "weather_id", "occasion_id"):
-            try:    
+            try:
                 UUID(str(data[key]))
             except ValueError:
                 raise ValueError(f"'{data[key]}' para '{key}' no es un UUID válido.")
 
-        try:    
+        try:
             UUID(str(data["color"]["catalog_id"]))
         except ValueError:
             raise ValueError(f"'{data['color']['catalog_id']}' no es UUID válido para color.catalog_id.")
 
         c = data["color"]
-        if not (0 <= int(c["hue"])        <= 360): 
+        if not (0 <= int(c["hue"])        <= 360):
             raise ValueError(f"Hue fuera de rango: {c['hue']}")
-        if not (0 <= int(c["saturation"]) <= 100): 
+        if not (0 <= int(c["saturation"]) <= 100):
             raise ValueError(f"Saturation fuera de rango: {c['saturation']}")
-        if not (0 <= int(c["lightness"])  <= 100): 
+        if not (0 <= int(c["lightness"])  <= 100):
             raise ValueError(f"Lightness fuera de rango: {c['lightness']}")
 
         return data
-
-    # ── Builders ──────────────────────────────────────────────────────────────
 
     def _build_response(self, clothing_id: UUID, data: dict) -> VisionAnalysisResponse:
         c = data["color"]

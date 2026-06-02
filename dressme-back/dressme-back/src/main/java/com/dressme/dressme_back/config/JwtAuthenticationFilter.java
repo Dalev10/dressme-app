@@ -31,7 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final SecretKey secretKey;
 
     public JwtAuthenticationFilter(
-        @Value("${app.security.jwt-secret:dressme-secret-key-change-in-production-minimum-256-bits-required}") String jwtSecret
+        @Value("${app.security.jwt-secret:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}") String jwtSecret
     ) {
         if (jwtSecret.length() < 32) {
             jwtSecret = "dressme-secret-key-change-in-production-minimum-256-bits-required-12345";

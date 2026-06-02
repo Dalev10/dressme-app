@@ -1,24 +1,12 @@
 """
-config.py
-──────────
-Gestión de configuración con pydantic-settings.
-
-Pydantic Settings lee las variables en este orden de prioridad:
-  1. Variables de entorno del sistema (las del docker-compose o .env)
-  2. Archivo .env en el directorio raíz del proyecto
-  3. Valores por defecto definidos en la clase
-
-Si una variable marcada como requerida (sin default) no existe
-en ninguna fuente, el servidor lanza ValidationError al arrancar,
-con un mensaje claro de qué variable falta. Falla rápido y con claridad,
+settings/config.py
 """
 
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
- 
- 
+
+
 class Settings(BaseSettings):
- 
     # ── Google Gemini (embeddings + Gemini Vision para prendas) ──────────────
     # Una sola API key cubre:
     #   - gemini-embedding-001  (onboarding: style card embeddings)
@@ -41,8 +29,8 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
- 
- 
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()

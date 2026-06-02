@@ -64,7 +64,6 @@ services:
       - dressme-network
 
   # 5. Microservicio de Inteligencia Artificial
-# 5. Microservicio de Inteligencia Artificial
   dressme-ai:
     build:
       context: ./dressme-ai
@@ -73,7 +72,9 @@ services:
     env_file:
       - .env
     environment:
-      - AI_SERVICE_URL=http://127.0.0.1:8000
+      - AI_SERVICE_URL=http://dressme-ai:8000
+    ports:
+      - "8000:8000"
     depends_on:
       - dressme-db
       - dressme-database
