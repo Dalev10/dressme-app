@@ -27,11 +27,8 @@ public class OnboardingController {
     private final JwtTokenProvider jwtTokenProvider;
 
     @GetMapping("/style-cards")
-    public ResponseEntity<List<StyleCardDTO>> getStyleCards(
-        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader
-    ) {
+    public ResponseEntity<List<StyleCardDTO>> getStyleCards() {
         log.info("Gateway-Onboarding: GET /style-cards");
-        requireBearerToken(authHeader);
 
         String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
 

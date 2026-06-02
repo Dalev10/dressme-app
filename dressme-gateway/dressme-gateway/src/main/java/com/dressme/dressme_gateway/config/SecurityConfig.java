@@ -53,6 +53,12 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,  "/api/v1/onboarding/style-cards").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/onboarding/calibrate").permitAll()
 
+                // Score
+                .requestMatchers(HttpMethod.POST, "/api/v1/score/outfit").permitAll()
+
+                // Taste similarity
+                .requestMatchers(HttpMethod.POST, "/api/v1/taste-similarity/batch").permitAll()
+
                 // Wardrobe
                 .requestMatchers(HttpMethod.POST,   "/api/v1/wardrobe/upload").permitAll()
                 .requestMatchers(HttpMethod.GET,    "/api/v1/wardrobe/catalog").permitAll()
