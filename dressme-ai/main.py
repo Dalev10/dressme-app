@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from routers.trend import router as trend_router
 from settings.config import get_settings
 from infra.error_handler import register_error_handlers
-from routers import onboarding, wardrobe
+from routers import onboarding, wardrobe, outfit
 from routers.onboarding import router as onboarding_router
 
 
@@ -70,6 +70,7 @@ register_error_handlers(app)
 
 app.include_router(onboarding)
 app.include_router(wardrobe)
+app.include_router(outfit)
 app.include_router(trend_router)
 
 logger.info("Routers registrados: onboarding, trend")
@@ -78,9 +79,12 @@ logger.info("Routers registrados: /internal/ai/onboarding/generate-embeddings, /
 
 logger.info(
     "Routers registrados: "
-    "/ai/onboarding/generate-embeddings, "
-    "/ai/onboarding/compute-taste-vector, "
-    "/ai/wardrobe/analyze"
+    "/internal/ai/onboarding/generate-embeddings, "
+    "/internal/ai/onboarding/compute-taste-vector, "
+    "/ai/wardrobe/analyze, "
+    "/ai/outfit/embed-clothing, "
+    "/ai/outfit/embed-clothing/batch, "
+    "/ai/outfit/generate"
 )
 
 
@@ -88,6 +92,6 @@ logger.info(
 def health_check():
     return {
         "service": settings.app_name,
-        "status": "active",
-        "env": settings.app_env,
+        "status":  "active",
+        "env":     settings.app_env,
     }
