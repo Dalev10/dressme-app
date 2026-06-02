@@ -84,7 +84,7 @@ def get_embedding_clothing_service() -> EmbeddingClothingService:
  
  
 def get_outfit_generator_service() -> OutfitGeneratorService:
-    return OutfitGeneratorService()
+    return OutfitGeneratorService(
         catalog=get_catalog_client(),  # inyectado como CatalogProvider
     )
 
