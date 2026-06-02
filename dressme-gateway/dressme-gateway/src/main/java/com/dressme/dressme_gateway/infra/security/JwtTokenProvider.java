@@ -26,7 +26,7 @@ public class JwtTokenProvider {
     private final long expirationHours;
 
     public JwtTokenProvider(
-        @Value("${app.security.jwt-secret:dressme-secret-key-change-in-production-minimum-256-bits-required}") String jwtSecret,
+        @Value("${app.security.jwt-secret:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}") String jwtSecret,
         @Value("${app.security.jwt-expiration-hours:24}") long expirationHours
     ) {
         // Asegurar que tenga al menos 256 bits (32 bytes)
