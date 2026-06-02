@@ -9,5 +9,10 @@ import java.util.UUID;
 
 @Repository
 public interface DressCodeRepository extends JpaRepository<DressCode, UUID> {
+
+    /**
+     * DressCodes activos ordenados alfabéticamente.
+     * Usados en los filtros del flujo de generación de outfits.
+     */
     List<DressCode> findByIsActiveTrueOrderByNameAsc();
 }
