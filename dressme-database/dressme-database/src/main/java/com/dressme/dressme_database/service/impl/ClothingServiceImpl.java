@@ -7,10 +7,14 @@ import com.dressme.dressme_database.schema.dto.*;
 import com.dressme.dressme_database.service.ClothingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -131,13 +135,13 @@ public class ClothingServiceImpl implements ClothingService {
     @Override
     @Transactional
     public ClothingDetailResponse updateClothing(
-                UUID clothingId, 
+                UUID clothingId,
                 UUID userId,
                 ClothingUpdateRequest request) {
-        
+
         log.info(
                 "ClothingService: Corrección manual — prenda {} por usuario {}",
-                clothingId, 
+                clothingId,
                 userId
         );
 
@@ -157,22 +161,22 @@ public class ClothingServiceImpl implements ClothingService {
 
         if (type.getParent() != null) {
             throw new CategoryTypeMismatchException(
-                    "El ID de tipo " 
-                        + request.typeId() 
+                    "El ID de tipo "
+                        + request.typeId()
                         + " no corresponde a una categoría raíz"
                 );
         }
 
-        ClothingCategory category = 
+        ClothingCategory category =
                 categoryRepository.findByIdAndParentIdAndIsActiveTrue(
-                        request.categoryId(), 
+                        request.categoryId(),
                         request.typeId()
                 )
                 .orElseThrow(() ->
                         new CategoryTypeMismatchException(
-                                "La categoria" 
-                                + request.categoryId() 
-                                + " no pertenece al tipo" 
+                                "La categoria"
+                                + request.categoryId()
+                                + " no pertenece al tipo"
                                 + request.typeId()
                         ));
 
@@ -180,21 +184,19 @@ public class ClothingServiceImpl implements ClothingService {
                 .orElseThrow(() -> new RuntimeException(
                         "Estilo no encontrado: " + request.styleId()));
 
-
         // Actualizar categoría en tbl_clothes
         clothing.setCategory(category);
         // ✦ Marcar embedding como desactualizado: el usuario corrigió la prenda
         // después de que se vectorizó, así que el embedding es inválido.
         // El motor de recomendación lo detectará y re-vectorizará antes de calcular outfits.
         clothing.setEmbeddingStale(true);
-        
 
         // Actualizar audit — crear si aún no existe (prenda no procesada por IA
         // pero el usuario quiere asignar manualmente)
         ClothingAiAudit audit = auditRepository
                 .findByClothingId(clothingId)
                 .orElse(ClothingAiAudit.builder().clothing(clothing).build());
-        
+
         /*
         * Reservado para ClothingCorrectionEvent.
         *
@@ -204,16 +206,15 @@ public class ClothingServiceImpl implements ClothingService {
         * active learning y reentrenamiento IA.
         */
 
-        ClothingCategory previousCategory = 
+        ClothingCategory previousCategory =
                 audit.getPredictedCategory();
 
-        Style previousStyle = 
+        Style previousStyle =
                 audit.getPredictedStyle();
 
         audit.setPredictedCategory(category);
         audit.setPredictedStyle(style);
         audit.setWasCorrected(true); // ← señal clave para el scoring engine
-        
 
         // Si no había audit previo, marcar la prenda como procesada
         // (el usuario la caracterizó manualmente)
@@ -223,7 +224,7 @@ public class ClothingServiceImpl implements ClothingService {
 
         clothingRepository.save(clothing);
         auditRepository.save(audit);
-        
+
         log.info("ClothingService: Prenda {} actualizada manualmente — was_corrected=true",
                 clothingId);
 
@@ -233,20 +234,18 @@ public class ClothingServiceImpl implements ClothingService {
     @Override
     @Transactional(readOnly = true)
     public WardrobeEditCatalogDTO getEditCatalog() {
-        log.info("ClothingService: Obteniendo catálogo para edición de guardarropa"
-
-        );
+        log.info("ClothingService: Obteniendo catálogo para edición de guardarropa");
 
         List<WardrobeEditCatalogDTO.CategoryEntry> categories =
                 categoryRepository
                         .findByIsActiveTrueOrderByNameAsc()
                         .stream()
-                        .map(category -> 
+                        .map(category ->
                                 new WardrobeEditCatalogDTO.CategoryEntry(
-                                        category.getId(), 
+                                        category.getId(),
                                         category.getName(),
-                                        category.getParent() != null 
-                                                ? category.getParent().getId() 
+                                        category.getParent() != null
+                                                ? category.getParent().getId()
                                                 : null
                                         )
                                 )
@@ -255,16 +254,16 @@ public class ClothingServiceImpl implements ClothingService {
                 styleRepository
                         .findByIsActiveTrueOrderByNameAsc()
                         .stream()
-                        .map(style -> 
+                        .map(style ->
                                 new WardrobeEditCatalogDTO.StyleEntry(
-                                        style.getId(), 
+                                        style.getId(),
                                         style.getName()
                                         )
                                 )
                         .toList();
 
         return new WardrobeEditCatalogDTO(
-                categories, 
+                categories,
                 styles
         );
     }
@@ -318,6 +317,91 @@ public class ClothingServiceImpl implements ClothingService {
                 .collect(Collectors.toList());
 
         return new CatalogDTO(categories, styles, colors, occasions, weathers);
+    }
+
+    // ── Outfit Generation ─────────────────────────────────────────────────────
+
+    /**
+     * Paso 1 de 2 — query de metadatos escalares via proyección JPA.
+     * Paso 2 de 2 — hidratación del embeddingVector desde entidades Clothing.
+     *
+     * El split en dos pasos es deliberado: el tipo vector(1536) de pgvector
+     * no se serializa de forma fiable como campo de proyección plana en todos
+     * los drivers JDBC. Cargar la entidad Clothing completa (con el
+     * @JdbcTypeCode(SqlTypes.VECTOR)) garantiza la deserialización correcta.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<ClothingEmbeddingDTO> getClothingForOutfit(
+            UUID userId, UUID occasionId, UUID weatherId) {
+
+        log.info("ClothingService: Cargando guardarropa para outfit generation — " +
+                 "userId={}, occasionId={}, weatherId={}", userId, occasionId, weatherId);
+
+        // Validar que el usuario existe (fail-fast antes del query costoso)
+        if (!userRepository.existsById(userId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Usuario no encontrado: " + userId);
+        }
+
+        // 1. Metadatos escalares via proyección JPA (sin embedding_vector)
+        List<ClothingWithEmbeddingProjection> projections =
+                clothingRepository.findForOutfitGeneration(userId, occasionId, weatherId);
+
+        if (projections.isEmpty()) {
+            log.info("ClothingService: Sin prendas aptas para userId={} occasionId={} weatherId={}",
+                     userId, occasionId, weatherId);
+            return List.of();
+        }
+
+        // 2. IDs para hidratar los embeddings en un segundo query
+        List<UUID> ids = projections.stream()
+                .map(ClothingWithEmbeddingProjection::getClothingId)
+                .collect(Collectors.toList());
+
+        // 3. Entidades Clothing con el embedding_vector deserializado correctamente
+        List<Clothing> clothingWithEmbeddings = clothingRepository.findEmbeddingsByIds(ids);
+
+        // 4. Mapa clothingId → embeddingVector para lookup O(1)
+        Map<UUID, float[]> embeddingMap = clothingWithEmbeddings.stream()
+                .collect(Collectors.toMap(
+                        Clothing::getId,
+                        Clothing::getEmbeddingVector
+                ));
+
+        // 5. Combinar proyección + embedding en el DTO final
+        List<ClothingEmbeddingDTO> result = new ArrayList<>(projections.size());
+        for (ClothingWithEmbeddingProjection p : projections) {
+            float[] rawVector = embeddingMap.get(p.getClothingId());
+
+            if (rawVector == null) {
+                // No debería ocurrir con el query correcto, pero es mejor
+                // omitir la prenda que lanzar NPE en mitad del flujo.
+                log.warn("ClothingService: embeddingVector null inesperado para clothingId={}",
+                         p.getClothingId());
+                continue;
+            }
+
+            // Convertir float[] → List<Float> para el contrato del DTO
+            List<Float> embeddingList = new ArrayList<>(rawVector.length);
+            for (float v : rawVector) {
+                embeddingList.add(v);
+            }
+
+            result.add(new ClothingEmbeddingDTO(
+                    p.getClothingId(),
+                    p.getSlot(),
+                    p.getDetectedHue(),
+                    p.getDetectedSaturation(),
+                    p.getDetectedLightness(),
+                    embeddingList,
+                    p.getOccasionName(),
+                    p.getWeatherName()
+            ));
+        }
+
+        log.info("ClothingService: {} prendas retornadas para outfit generation", result.size());
+        return result;
     }
 
     // ── Mappers privados ──────────────────────────────────────────────────────

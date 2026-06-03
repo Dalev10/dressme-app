@@ -18,13 +18,14 @@ import java.util.UUID;
  * Solo accesible desde la red interna Docker.
  *
  * Endpoints:
- *   POST   /internal/wardrobe                      → Paso 1: registrar prenda
- *   PATCH  /internal/wardrobe/audit                → Paso 2: audit Vision IA
- *   GET    /internal/wardrobe/user/{userId}        → lista resumida (grid)
- *   GET    /internal/wardrobe/{clothingId}         → detalle compuesto (view/edit)
- *   PATCH  /internal/wardrobe/{clothingId}         → corrección manual del usuario
- *   DELETE /internal/wardrobe/{clothingId}         → eliminar prenda
- *   GET    /internal/wardrobe/catalog              → catálogo de filtros
+ *   POST   /internal/wardrobe                                        → Paso 1: registrar prenda
+ *   PATCH  /internal/wardrobe/audit                                  → Paso 2: audit Vision IA
+ *   GET    /internal/wardrobe/user/{userId}                          → lista resumida (grid)
+ *   GET    /internal/wardrobe/{clothingId}                           → detalle compuesto (view/edit)
+ *   PATCH  /internal/wardrobe/{clothingId}                           → corrección manual del usuario
+ *   DELETE /internal/wardrobe/{clothingId}                           → eliminar prenda
+ *   GET    /internal/wardrobe/catalog                                → catálogo de filtros
+ *   GET    /internal/wardrobe/user/{userId}/for-outfit               → guardarropa para outfit generation
  */
 @RestController
 @RequestMapping("/internal/wardrobe")
@@ -67,6 +68,46 @@ public class InternalWardrobeController {
             @PathVariable UUID userId) {
         log.info("DB-Wardrobe: GET /user/{}", userId);
         return ResponseEntity.ok(clothingService.getWardrobeByUser(userId));
+    }
+
+    // ── Guardarropa para outfit generation ───────────────────────────────────
+
+    /**
+     * GET /internal/wardrobe/user/{userId}/for-outfit?occasionId={id}&weatherId={id}
+     *
+     * Devuelve las prendas del usuario aptas para generación de outfits:
+     *   - isProcessed = true
+     *   - embeddingVector IS NOT NULL
+     *   - isEmbeddingStale = false
+     *   - asociadas a la occasion y weather indicadas
+     *
+     * Cada elemento del array incluye: clothingId, slot, hue, saturation,
+     * lightness, embeddingVector (1536 floats), occasion, weather.
+     *
+     * Consumido por dressme-back → WardrobeOrchestratorService.getWardrobeForOutfit()
+     * como primer paso del flujo de outfit generation antes de llamar a dressme-ai.
+     *
+     * Nota de routing: este endpoint se declara ANTES de /{clothingId}
+     * para evitar que Spring interprete "for-outfit" como un UUID de prenda.
+     * El path "/user/{userId}/for-outfit" no colisiona con "/{clothingId}"
+     * porque el prefijo "/user/" es distinto.
+     *
+     * @param userId     propietario del guardarropa (path variable)
+     * @param occasionId ID de la ocasión seleccionada (query param)
+     * @param weatherId  ID del clima seleccionado (query param)
+     */
+    @GetMapping("/user/{userId}/for-outfit")
+    public ResponseEntity<List<ClothingEmbeddingDTO>> getWardrobeForOutfit(
+            @PathVariable UUID userId,
+            @RequestParam  UUID occasionId,
+            @RequestParam  UUID weatherId) {
+        log.info("DB-Wardrobe: GET /user/{}/for-outfit — occasionId={}, weatherId={}",
+                userId, occasionId, weatherId);
+        List<ClothingEmbeddingDTO> wardrobe =
+                clothingService.getClothingForOutfit(userId, occasionId, weatherId);
+        log.info("DB-Wardrobe: {} prendas devueltas para outfit generation — userId={}",
+                wardrobe.size(), userId);
+        return ResponseEntity.ok(wardrobe);
     }
 
     // ── Detalle compuesto (vista prenda + audit) ──────────────────────────────
@@ -125,7 +166,6 @@ public class InternalWardrobeController {
         return ResponseEntity.ok(clothingService.getCatalog());
     }
 
-
     @GetMapping("/{outfitId}/dress-code")
     public ResponseEntity<OutfitDressCodeResponse> getDressCode(
             @PathVariable UUID outfitId) {
@@ -133,8 +173,7 @@ public class InternalWardrobeController {
         return ResponseEntity.ok(outfitService.getDressCode(outfitId));
     }
 
-
-    @GetMapping("/catalog/edit")
+        @GetMapping("/catalog/edit")
     public ResponseEntity<WardrobeEditCatalogDTO> getEditCatalog() {
 
         log.info("DB-Wardrobe: GET /catalog/edit");
