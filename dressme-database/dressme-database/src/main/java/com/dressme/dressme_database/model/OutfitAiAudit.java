@@ -32,6 +32,18 @@ public class OutfitAiAudit {
     @Column(name = "affinity_score", precision = 3, scale = 2)
     private BigDecimal affinityScore;
 
+    /**
+     * Score total compuesto [0.0–1.0].
+     * Calculado por ScoreEngine: color + dresscode + taste + trend
+     * con redistribución de pesos cuando algún componente no aplica.
+     *
+     * Es el valor de ranking definitivo del outfit.
+     * Nullable: outfits anteriores al ScoreEngine no tienen este valor.
+     */
+
+    @Column(name = "total_score")
+    private Double totalScore;
+
     // Vector matemático del outfit completo para el motor de ML
     @JdbcTypeCode(SqlTypes.VECTOR)
     @Column(name = "outfit_vector", columnDefinition = "vector(1536)")

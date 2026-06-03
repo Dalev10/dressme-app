@@ -5,13 +5,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Payload que envía dressme-back cuando el orquestador persiste un outfit
- * generado por dressme-ai + ScoreEngine.
- *
- * Contiene los IDs de las prendas seleccionadas, los scores calculados
- * y el vector del outfit para similitud futura con el taste_vector.
- */
 public record OutfitCreateRequest(
 
     @NotNull(message = "El userId es obligatorio")
@@ -20,16 +13,9 @@ public record OutfitCreateRequest(
     @NotEmpty(message = "El outfit debe tener al menos una prenda")
     List<UUID> clothingIds,
 
-    /** DressCode inferido por el motor de recomendación (nullable) */
     UUID dressCodeId,
-
-    /** Ocasión para la que se generó el outfit (nullable) */
     UUID occasionId,
-
-    /** Clima para el que se generó el outfit (nullable) */
     UUID weatherId,
-
-    /** Nombre sugerido por Gemini (nullable) */
     String name,
 
     /**
@@ -46,6 +32,13 @@ public record OutfitCreateRequest(
     @NotNull
     @DecimalMin("0.00") @DecimalMax("1.00")
     BigDecimal affinityScore,
+
+    /**
+     * Score total compuesto calculado por el ScoreEngine [0.0–1.0].
+     * Pondera color + dresscode + taste + trend con redistribución de pesos.
+     * Nullable: outfits legacy creados antes del ScoreEngine no tienen este valor.
+     */
+    Double totalScore,
 
     /**
      * Vector semántico del outfit (1536 dims).
