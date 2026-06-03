@@ -111,16 +111,18 @@ public class OutfitServiceImpl implements OutfitService {
                 .outfit(savedOutfit)
                 .matchScore(request.matchScore())
                 .affinityScore(request.affinityScore())
+                .totalScore(request.totalScore())
                 .outfitVector(request.outfitVector())
                 .build();
 
         auditRepository.save(audit);
 
         log.info(
-                "OutfitService: Outfit {} creado — matchScore={}, affinityScore={}",
+                "OutfitService: Outfit {} creado — matchScore={}, affinityScore={}, totalScore={}",
                 savedOutfit.getId(),
                 request.matchScore(),
-                request.affinityScore()
+                request.affinityScore(),
+                request.totalScore()
         );
 
         return toSummary(savedOutfit, clothes, audit);

@@ -17,6 +17,11 @@ Patrón singleton via lru_cache:
   Igual que get_embedding_service():
   los servicios con estado externo (conexiones, clientes de API) se crean
   una sola vez durante la vida del proceso.
+
+  DresscodeSimilarityService es stateless (sin constructor con argumentos),
+  por lo que NO usa lru_cache — instanciarlo es O(1) y FastAPI crea una
+  instancia por request via Depends(), lo cual es el comportamiento correcto
+  para dependencias stateless.
 """
 
 from functools import lru_cache
@@ -29,6 +34,7 @@ from services.catalog_client import CatalogClient
 from services.wardrobe import WardrobeAnalysisService
 from services.embedding_clothing_service import EmbeddingClothingService
 from services.outfit_generator_service import OutfitGeneratorService
+from services.dresscode_similarity_service import DresscodeSimilarityService
 
 
 # ── Servicios ─────────────────────────────────────────────────────────────────
@@ -76,15 +82,28 @@ def get_wardrobe_analysis_service() -> WardrobeAnalysisService:
 
 
 # ── Outfit ────────────────────────────────────────────────────────────────────
- 
+
 @lru_cache(maxsize=1)
 def get_embedding_clothing_service() -> EmbeddingClothingService:
     settings = get_settings()
     return EmbeddingClothingService(api_key=settings.gemini_api_key)
- 
- 
+
+
 def get_outfit_generator_service() -> OutfitGeneratorService:
+    """
+    OutfitGeneratorService es stateless — sin dependencias externas.
+    FastAPI crea una instancia por request; el costo es despreciable.
+    """
     return OutfitGeneratorService()
+
+
+def get_dresscode_similarity_service() -> DresscodeSimilarityService:
+    """
+    DresscodeSimilarityService es stateless — solo numpy, sin I/O ni API keys.
+    No requiere lru_cache: instanciarlo es O(1) y no hay recursos que amortizar.
+    FastAPI crea una instancia por request a través de Depends().
+    """
+    return DresscodeSimilarityService()
 
 
 # ── Trend Score ───────────────────────────────────────────────────────────────

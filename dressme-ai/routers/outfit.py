@@ -8,6 +8,7 @@ Rutas expuestas (consumidas exclusivamente por dressme-back en la red interna Do
   POST /ai/outfit/embed-clothing        → vectoriza una prenda individual
   POST /ai/outfit/embed-clothing/batch  → vectoriza N prendas en una sola llamada
   POST /ai/outfit/generate              → genera combinaciones candidatas del guardarropa
+  POST /ai/outfit/generate/orchestrated → genera candidatos con dresscode_score calculado
 
 Patrón de diseño:
   - El router no contiene lógica de negocio.
@@ -25,12 +26,17 @@ from schemas.outfit import (
     ClothingEmbeddingResponse,
     OutfitGenerationRequest,
     OutfitGenerationResponse,
+    OutfitGenerationOrchestratedRequest,
+    OutfitGenerationOrchestratedResponse,
+    ScoredOutfitCandidate,
 )
 from services.embedding_clothing_service import EmbeddingClothingService
 from services.outfit_generator_service import OutfitGeneratorService
+from services.dresscode_similarity_service import DresscodeSimilarityService
 from settings.dependencies import (
     get_embedding_clothing_service,
     get_outfit_generator_service,
+    get_dresscode_similarity_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -193,3 +199,94 @@ def generate_outfits(
         result.skipped_clothing,
     )
     return result
+
+
+# ── Endpoint 4: Generate orchestrated outfit candidates ───────────────────────
+
+@router.post(
+    "/generate/orchestrated",
+    response_model=OutfitGenerationOrchestratedResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generar candidatos orquestados con dresscode_score",
+    description="""
+    Recibe el guardarropa pre-filtrado del usuario y el embedding del dress code
+    seleccionado (opcional). Devuelve candidatos de outfit enriquecidos con
+    `dresscode_score` calculado por similitud coseno.
+
+    **Flujo:**
+    1. Genera combinaciones candidatas usando `OutfitGeneratorService`.
+    2. Para cada candidato, calcula `dresscode_score` con `DresscodeSimilarityService`.
+    3. Devuelve `ScoredOutfitCandidate[]` con `dresscode_score` poblado.
+
+    **Responsabilidad de dressme-back tras recibir la respuesta:**
+    - Calcular `color_score`, `taste_score`, `trend_score` y `total_score`.
+    - Persistir cada outfit en dressme-database.
+
+    **Dress code opcional:**
+    Si `dresscode_embedding` es `null`, `dresscode_score = 0.0` en todos los
+    candidatos y el ScoreEngine en dressme-back redistribuirá el peso del componente.
+
+    Consumido exclusivamente por **dressme-back** (red interna Docker).
+    """,
+)
+def generate_outfits_orchestrated(
+    request:   OutfitGenerationOrchestratedRequest,
+    generator: OutfitGeneratorService     = Depends(get_outfit_generator_service),
+    dresscode: DresscodeSimilarityService = Depends(get_dresscode_similarity_service),
+) -> OutfitGenerationOrchestratedResponse:
+    logger.info(
+        "Router: POST /ai/outfit/generate/orchestrated — "
+        "userId=%s | ocasión=%s | clima=%s | prendas=%d | dresscode=%s",
+        request.user_id,
+        request.occasion,
+        request.weather,
+        len(request.wardrobe),
+        "sí" if request.dresscode_embedding is not None else "no",
+    )
+
+    # ── Paso 1: delegar al generador usando el contrato existente ─────────────
+    generation_request = OutfitGenerationRequest(
+        user_id=request.user_id,
+        occasion=request.occasion,
+        weather=request.weather,
+        wardrobe=request.wardrobe,
+        dress_code=None,
+    )
+
+    generation_result = generator.generate(generation_request)
+
+    logger.info(
+        "Router: %d candidatos crudos generados (total=%d, ignoradas=%d)",
+        len(generation_result.candidates),
+        generation_result.total_candidates,
+        generation_result.skipped_clothing,
+    )
+
+    # ── Paso 2 + 3: calcular dresscode_score y proyectar a ScoredOutfitCandidate ──
+    scored_candidates: list[ScoredOutfitCandidate] = []
+
+    for candidate in generation_result.candidates:
+        similarity = dresscode.compute(
+            outfit_vector=candidate.outfit_vector,
+            dresscode_embedding=request.dresscode_embedding,
+        )
+        scored_candidates.append(
+            ScoredOutfitCandidate(
+                slots=candidate.slots,
+                outfit_vector=candidate.outfit_vector,
+                dresscode_score=similarity.score,
+            )
+        )
+
+    logger.info(
+        "Router: %d candidatos enriquecidos con dresscode_score (applies=%s). "
+        "Retornando a dressme-back.",
+        len(scored_candidates),
+        "True" if request.dresscode_embedding is not None else "False",
+    )
+
+    return OutfitGenerationOrchestratedResponse(
+        candidates=scored_candidates,
+        total_candidates=generation_result.total_candidates,
+        skipped_clothing=generation_result.skipped_clothing,
+    )
