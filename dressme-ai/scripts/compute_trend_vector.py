@@ -8,21 +8,23 @@ import datetime
 import json
 import logging
 import os
-import re
 import sys
 import time
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 import numpy as np
 import requests
 from google import genai
 from google.genai import types
 from jose import jwt
-from PIL import Image
+from pydantic import BaseModel
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
+# Configurar logging para no interferir con la barra de progreso en consola
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ CHECKPOINT_FILE      = Path("checkpoint_prendas.json")
 METADATA_FILE        = Path("trend_metadata_report.json")
 
 VISION_MODEL_NAME    = "gemini-2.5-flash"
-EMBEDDING_MODEL_NAME = "gemini-embedding-001"
+EMBEDDING_MODEL_NAME = "gemini-embedding-001" # Modelo actualizado
 EXPECTED_DIMS        = 1536
 
 BACK_URL               = os.environ.get("BACK_URL", "http://dressme-back:8080")
@@ -44,6 +46,14 @@ INTERNAL_SERVICE_NAME = "dressme-ai-script"
 
 _client: genai.Client | None = None
 
+# Modelo Pydantic para Structured Outputs
+class Prenda(BaseModel):
+    categoria: str
+    estilo: str
+    color: str
+    clima: str
+    ocasion: str
+
 def get_client() -> genai.Client:
     global _client
     if _client is None:
@@ -54,10 +64,8 @@ def get_client() -> genai.Client:
         _client = genai.Client(api_key=api_key)
     return _client
 
-
 def format_time(seconds: float) -> str:
     return str(datetime.timedelta(seconds=int(seconds)))
-
 
 def load_checkpoint() -> dict:
     if CHECKPOINT_FILE.exists():
@@ -65,11 +73,9 @@ def load_checkpoint() -> dict:
             return json.load(f)
     return {}
 
-
 def save_checkpoint(data: dict):
     with open(CHECKPOINT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-
 
 def generate_metadata_report(success_images: int, total_garments: int, status: str):
     metadata = {
@@ -87,7 +93,6 @@ def generate_metadata_report(success_images: int, total_garments: int, status: s
         json.dump(metadata, f, indent=4, ensure_ascii=False)
     logger.info("\n[+] Reporte de metadatos generado en: %s", METADATA_FILE)
 
-
 def discover_images(dataset_path: Path) -> list[Path]:
     if not dataset_path.exists():
         logger.error("El directorio '%s' no existe.", dataset_path)
@@ -104,7 +109,6 @@ def discover_images(dataset_path: Path) -> list[Path]:
 
     return sorted(images)
 
-
 def extract_garments_metadata(image_path: Path) -> list[str]:
     client = get_client()
 
@@ -117,9 +121,7 @@ def extract_garments_metadata(image_path: Path) -> list[str]:
 
     prompt = (
         "Analiza esta imagen de moda e identifica cada prenda de ropa individual. "
-        "Para cada prenda, extrae exactamente estos 5 atributos: categoria, estilo, color, clima y ocasion. "
-        "Devuelve la respuesta UNICAMENTE como un arreglo JSON valido, sin markdown, sin explicaciones. "
-        "Ejemplo: [{\"categoria\": \"pantalones\", \"estilo\": \"urbano\", \"color\": \"azul\", \"clima\": \"templado\", \"ocasion\": \"casual\"}]"
+        "Para cada prenda, extrae exactamente estos 5 atributos: categoria, estilo, color, clima y ocasion."
     )
 
     response = client.models.generate_content(
@@ -128,14 +130,13 @@ def extract_garments_metadata(image_path: Path) -> list[str]:
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
             types.Part.from_text(text=prompt),
         ],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=list[Prenda], # Garantiza el formato correcto
+        )
     )
 
-    raw = response.text or ""
-    cleaned = re.sub(r"```(?:json)?", "", raw).strip()
-    if not cleaned:
-        raise ValueError(f"Gemini devolvio respuesta vacia para {image_path.name}")
-
-    items = json.loads(cleaned)
+    items = json.loads(response.text or "[]")
     descriptions = []
     for item in items:
         text_desc = (
@@ -148,97 +149,128 @@ def extract_garments_metadata(image_path: Path) -> list[str]:
         descriptions.append(text_desc)
     return descriptions
 
-
-def extract_with_backoff(img_path: Path, max_retries: int = 5) -> list[str]:
+def extract_with_backoff(img_path: Path, max_retries: int = 10) -> list[str]:
     for attempt in range(max_retries):
         try:
             return extract_garments_metadata(img_path)
         except Exception as e:
             if "429" in str(e) or "quota" in str(e).lower():
                 wait_time = 5 * (attempt + 1)
-                logger.warning("  [!] Limite API. Esperando %ds (intento %d/%d)...", wait_time, attempt + 1, max_retries)
+                # Se imprime con salto de línea para no romper el ETA inferior
+                print(f"\n  [!] Límite API. Esperando {wait_time}s (intento {attempt + 1}/{max_retries})...")
                 time.sleep(wait_time)
             else:
-                logger.error("  [X] Error en %s: %s", img_path.name, e)
+                print(f"\n  [X] Error en {img_path.name}: {e}")
                 return []
     return []
 
-
-def get_embedding(text: str) -> list[float] | None:
+# BATCH EMBEDDING: Soporta recibir una lista entera de descripciones
+def get_embeddings_batch(texts: list[str]) -> list[list[float]] | None:
+    if not texts:
+        return []
     client = get_client()
     try:
         response = client.models.embed_content(
             model=EMBEDDING_MODEL_NAME,
-            contents=text,
+            contents=texts,
             config=types.EmbedContentConfig(
                 task_type="SEMANTIC_SIMILARITY",
                 output_dimensionality=EXPECTED_DIMS,
             ),
         )
-        return response.embeddings[0].values
+        # Retorna todos los vectores generados en una sola llamada
+        return [emb.values for emb in response.embeddings]
     except Exception as e:
-        logger.error("  [X] Error al generar embedding: %s", e)
+        print(f"\n  [X] Error al generar batch de embeddings: {e}")
         return None
 
+# Función Worker para procesamiento concurrente
+def process_single_image(img_path: Path):
+    descriptions = extract_with_backoff(img_path)
+    if not descriptions:
+        return img_path.name, None, False
+    
+    vectors = get_embeddings_batch(descriptions)
+    if vectors:
+        return img_path.name, vectors, True
+    return img_path.name, None, False
 
-def run_pipeline_resilient(images: list[Path]):
+def run_pipeline_resilient(images: list[Path], max_workers: int = 5):
     processed_data = load_checkpoint()
     all_vectors    = []
 
-    logger.info("Imagenes en checkpoint: %d", len(processed_data))
+    logger.info("Imágenes en checkpoint: %d", len(processed_data))
 
-    consecutive_failures        = 0
-    images_processed_in_session = 0
+    # Filtrar las imágenes que ya están en el checkpoint
+    images_to_process = [img for img in images if img.name not in processed_data]
+
+    # Cargar los vectores del checkpoint a la memoria
+    for img_id, vectors in processed_data.items():
+        all_vectors.extend(vectors)
+
+    total_to_process = len(images_to_process)
+    
+    if total_to_process == 0:
+        logger.info("Todas las imágenes ya han sido procesadas.")
+        generate_metadata_report(len(processed_data), len(all_vectors), "completado_desde_cache")
+        matrix = np.array(all_vectors, dtype=np.float32)
+        return matrix.mean(axis=0), len(all_vectors)
+
     start_time                  = time.time()
-    total_images                = len(images)
+    images_processed_in_session = 0
+    consecutive_failures        = 0
     status_final                = "completado"
+    
+    checkpoint_lock = Lock() # Asegurar que varios hilos no corrompan el archivo JSON
 
-    for i, img_path in enumerate(images, start=1):
-        img_id = img_path.name
+    logger.info("Iniciando procesamiento concurrente (%d hilos)...\n", max_workers)
 
-        if img_id in processed_data:
-            all_vectors.extend(processed_data[img_id])
-            continue
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Enviar todas las tareas al pool
+        future_to_img = {executor.submit(process_single_image, img): img for img in images_to_process}
 
-        descriptions = extract_with_backoff(img_path)
+        for future in as_completed(future_to_img):
+            img_path = future_to_img[future]
+            try:
+                img_id, vectors, success = future.result()
 
-        if not descriptions:
-            consecutive_failures += 1
-            logger.warning("  -> Fallo detectado. Consecutivos: %d/3", consecutive_failures)
-            if consecutive_failures >= 3:
-                logger.error("\n[!!!] 3 FALLOS CONSECUTIVOS. Abortando.")
-                status_final = "parcial_por_errores"
-                break
-            continue
-        else:
-            consecutive_failures = 0
+                if success and vectors:
+                    consecutive_failures = 0
+                    all_vectors.extend(vectors)
+                    # Bloquear brevemente para guardar el progreso de forma segura
+                    with checkpoint_lock:
+                        processed_data[img_id] = vectors
+                        save_checkpoint(processed_data)
+                else:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 5: # Tolerancia aumentada por estar en paralelo
+                        print("\n\n[!!!] 5 FALLOS CONSECUTIVOS. Abortando.")
+                        status_final = "parcial_por_errores"
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
 
-        img_vectors = []
-        for desc in descriptions:
-            vector = get_embedding(desc)
-            if vector:
-                img_vectors.append(vector)
-                all_vectors.append(vector)
+            except Exception as e:
+                consecutive_failures += 1
 
-        if img_vectors:
-            processed_data[img_id] = img_vectors
-            save_checkpoint(processed_data)
+            images_processed_in_session += 1
+            elapsed     = time.time() - start_time
+            avg_time    = elapsed / images_processed_in_session
+            remaining   = total_to_process - images_processed_in_session
+            eta_seconds = avg_time * remaining
 
-        images_processed_in_session += 1
-        elapsed     = time.time() - start_time
-        avg_time    = elapsed / images_processed_in_session
-        remaining   = total_images - i
-        eta_seconds = avg_time * remaining
+            # ETA dinámico que se sobreescribe en la última línea
+            sys.stdout.write(
+                f"\rProgreso: [{images_processed_in_session}/{total_to_process}] | "
+                f"Transcurrido: {format_time(elapsed)} | "
+                f"ETA: {format_time(eta_seconds)} | "
+                f"Última img: {img_path.name[:12]:<12}"
+            )
+            sys.stdout.flush()
 
-        logger.info(
-            "[%d/%d] %s procesada | Transcurrido: %s | ETA: %s",
-            i, total_images, img_id, format_time(elapsed), format_time(eta_seconds),
-        )
-
-        time.sleep(0.5)
+    print() # Salto de línea limpio cuando termina la barra de progreso
 
     if not all_vectors:
-        logger.error("No se recolectaron vectores. Abortando.")
+        logger.error("No se recolectaron vectores en total. Abortando.")
         sys.exit(1)
 
     matrix     = np.array(all_vectors, dtype=np.float32)
@@ -246,8 +278,11 @@ def run_pipeline_resilient(images: list[Path]):
 
     generate_metadata_report(len(processed_data), len(all_vectors), status_final)
 
-    return avg_vector, len(all_vectors)
+    # Imprimir el tiempo total demorado
+    total_time = time.time() - start_time
+    logger.info("\n[+] Tiempo total de procesamiento de sesión: %s", format_time(total_time))
 
+    return avg_vector, len(all_vectors)
 
 def _generate_internal_jwt() -> str:
     now = datetime.datetime.utcnow()
@@ -258,7 +293,6 @@ def _generate_internal_jwt() -> str:
         "exp":  now + datetime.timedelta(minutes=5),
     }
     return jwt.encode(payload, INTERNAL_JWT_SECRET, algorithm="HS256")
-
 
 def save_to_back(vector: np.ndarray, count: int, description: str) -> None:
     token = _generate_internal_jwt()
@@ -275,7 +309,7 @@ def save_to_back(vector: np.ndarray, count: int, description: str) -> None:
         "Authorization": f"Bearer {token}",
     }
 
-    logger.info("\n[+] Enviando vector a dressme-back -> %s (imageCount=%d)", TREND_DATASET_ENDPOINT, count)
+    logger.info("\n[+] Enviando vector a backend -> %s (imageCount=%d)", TREND_DATASET_ENDPOINT, count)
 
     try:
         response = requests.post(TREND_DATASET_ENDPOINT, data=json.dumps(payload), headers=headers, timeout=30)
@@ -283,17 +317,17 @@ def save_to_back(vector: np.ndarray, count: int, description: str) -> None:
         result = response.json()
         logger.info("[+] Vector persistido — id=%s, computedAt=%s", result.get("id"), result.get("computedAt"))
     except requests.exceptions.ConnectionError:
-        raise RuntimeError(f"Conexion rechazada a {TREND_DATASET_ENDPOINT}")
+        raise RuntimeError(f"Conexión rechazada a {TREND_DATASET_ENDPOINT}")
     except requests.exceptions.HTTPError as e:
         raise RuntimeError(f"Error HTTP {e.response.status_code} al persistir el vector")
     except requests.exceptions.Timeout:
-        raise RuntimeError("Timeout al conectar con dressme-back")
-
+        raise RuntimeError("Timeout al conectar con backend")
 
 def main():
     parser = argparse.ArgumentParser(description="Generador Batch de Vector de Tendencia")
     parser.add_argument("--path", type=str, default="dataset_moda_actual")
     parser.add_argument("--desc", type=str, default="Tendencia extraida por atributos")
+    parser.add_argument("--workers", type=int, default=5, help="Número de hilos concurrentes")
     args = parser.parse_args()
 
     if not os.environ.get("GEMINI_API_KEY"):
@@ -307,13 +341,12 @@ def main():
     logger.info("Backend  : %s", TREND_DATASET_ENDPOINT)
 
     image_paths = discover_images(Path(args.path))
-    logger.info("Total de imagenes a procesar: %d\n", len(image_paths))
+    logger.info("Total de imágenes detectadas: %d\n", len(image_paths))
 
-    avg_vec, total_items = run_pipeline_resilient(image_paths)
+    avg_vec, total_items = run_pipeline_resilient(image_paths, max_workers=args.workers)
     save_to_back(avg_vec, total_items, args.desc)
 
     logger.info("\n=== PROCESO COMPLETADO ===")
-
 
 if __name__ == "__main__":
     main()
