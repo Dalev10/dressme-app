@@ -1,48 +1,97 @@
-server:
-  port: 8080
+# ═══════════════════════════════════════════════════════════════════════════════════
+# DRESSME BACKEND - CONFIGURACIÓN CORREGIDA (Nombres de red Docker)
+# ═══════════════════════════════════════════════════════════════════════════════════
 
 spring:
   application:
     name: dressme-back
- 
-# ── Almacenamiento local de imágenes ──────────────────────────────────────────
-# Leído por LocalStorageServiceImpl vía @Value.
-storage:
-  path: ${STORAGE_PATH:/app/images}
-  base-url: ${STORAGE_BASE_URL:http://dressme-back:8080/images}
-  cloud:
-    openfeign:
-      okhttp:
-        enabled: true
-      client:
-        config:
-          dressme-database-color-client:
-            connectTimeout: 2000
-            readTimeout: 3000
-          dressme-database-taste-client:
-            connectTimeout: 2000
-            readTimeout: 3000
 
-# ── URLs de microservicios internos ───────────────────────────────────────────
+  datasource:
+    # CORREGIDO: El nombre del host es 'dressme-db' y la DB es 'dressmedb' (según tu docker-compose y .env)
+    url: jdbc:postgresql://dressme-db:5432/dressmedb
+    username: user_admin
+    password: password123
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+
+  web:
+    cors:
+      allowed-origins:
+        - 'http://localhost:5173'
+        - 'http://localhost:5174'
+      allowed-methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - PATCH
+        - OPTIONS
+      allowed-headers:
+        - '*'
+      expose-headers:
+        - 'Authorization'
+        - 'Content-Type'
+      allow-credentials: true
+      max-age: 3600
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN PERSONALIZADA DE DRESSME
+# ═══════════════════════════════════════════════════════════════════════════════════
+
 app:
-  services:
-    database-url: ${DATABASE_SERVICE_URL:http://dressme-database:8080}
-    ai-url: ${AI_SERVICE_URL:http://dressme-ai:8000}
   security:
-    jwt-secret: ${JWT_SECRET:dressme-secret-key-change-in-production-minimum-256-bits-required-12345}
-  cors:
-    allowed-origin: ${ALLOWED_ORIGIN:}
-  score-engine:
-    weights:
-      color: ${SCORE_WEIGHT_COLOR:40.0}
-      dresscode: ${SCORE_WEIGHT_DRESSCODE:20.0}
-      taste: ${SCORE_WEIGHT_TASTE:20.0}
-      trend: ${SCORE_WEIGHT_TREND:20.0}
+    jwt-secret: 'dressme-secret-key-change-in-production-minimum-256-bits-required-12345'
 
-google:
-  oauth:
-    userinfo-url: https://www.googleapis.com/oauth2/v3/userinfo
+  feign:
+    # CORREGIDO: Usando el nombre del servicio de red interna de Docker
+    ai-service-url: 'http://dressme-ai:8000'
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+# SERVIDOR (Tomcat)
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+# LOGGING (Reducido para evitar saturación de consola en Docker)
+# ═══════════════════════════════════════════════════════════════════════════════════
 
 logging:
   level:
-    org.springframework.security: INFO
+    root: INFO
+    com.dressme.dressme_back: DEBUG
+    feign: DEBUG
+    org.springframework.security: INFO # Cambiado a INFO para que no llene el log de basura
+    org.hibernate.SQL: INFO # Cambiado a INFO para rendimiento
+
+---
+# ═══════════════════════════════════════════════════════════════════════════════════
+# PERFIL: PRODUCCIÓN
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+spring:
+  config:
+    activate:
+      on-profile: production
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+app:
+  security:
+    jwt-secret: ${JWT_SECRET}

@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.StringJoiner;
 
 @Service
 @RequiredArgsConstructor
@@ -153,27 +154,33 @@ public class UserServiceImpl implements UserService {
                 profile.getTasteVector() != null ? profile.getTasteVector().length : null
         );
 
-        boolean profileUpdated = false;
+        // Determinar nuevos valores (o mantener los actuales si no vienen en el request)
+        boolean newCalibrated = request.getIsCalibrated() != null
+                ? request.getIsCalibrated()
+                : profile.isCalibrated();
 
-        if (request.getIsCalibrated() != null) {
-            profile.setCalibrated(request.getIsCalibrated());
-            profileUpdated = true;
+        float[] newVector = (request.getTasteVector() != null && request.getTasteVector().length > 0)
+                ? request.getTasteVector()
+                : profile.getTasteVector();
+
+        String newSourceType = (request.getSourceType() != null && !request.getSourceType().isBlank())
+                ? request.getSourceType().trim().toUpperCase()
+                : profile.getSourceType();
+
+        // Convertir el vector float[] a la representación de pgvector: [v1,v2,...]
+        String vectorParam = null;
+        if (newVector != null) {
+            StringJoiner sj = new StringJoiner(",", "[", "]");
+            for (float f : newVector) {
+                sj.add(Float.toString(f));
+            }
+            vectorParam = sj.toString();
         }
 
-        if (request.getTasteVector() != null && request.getTasteVector().length > 0) {
-            profile.setTasteVector(request.getTasteVector());
-            profileUpdated = true;
-        }
-
-        if (request.getSourceType() != null && !request.getSourceType().isBlank()) {
-            profile.setSourceType(request.getSourceType().trim().toUpperCase());
-            profileUpdated = true;
-        }
-
-        if (profileUpdated) {
-            profile.setLastUpdated(LocalDateTime.now());
-            userTasteProfileRepository.save(profile);
-        }
+        // Forzar UPDATE nativo para evitar problemas de binding/detection con Hibernate
+        userTasteProfileRepository.updateTasteProfile(
+                userId, vectorParam, newCalibrated, newSourceType, LocalDateTime.now()
+        );
 
         UserResponseDTO response = getUserProfile(userId);
 

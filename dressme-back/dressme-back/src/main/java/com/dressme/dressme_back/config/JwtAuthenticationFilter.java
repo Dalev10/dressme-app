@@ -20,7 +20,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -65,22 +64,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String subject = claims.getSubject();
             String role = claims.get("role", String.class);
 
-            List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-
+            List<SimpleGrantedAuthority> authorities;
             if ("INTERNAL_SERVICE".equals(role)) {
-                authorities.add(new SimpleGrantedAuthority("ROLE_INTERNAL_SERVICE"));
-                log.debug("JWT interno válido para servicio: {}", subject);
+                authorities = List.of(new SimpleGrantedAuthority("ROLE_INTERNAL_SERVICE"));
             } else {
-                log.debug("JWT de usuario válido para subject: {}", subject);
+                authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
             }
 
             UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(subject, null, authorities);
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            log.debug("JWT validado para subject: {}", subject);
 
         } catch (Exception e) {
-            log.warn("JWT inválido o expirado: {}", e.getMessage());
+            log.warn("JWT validation failed: {}", e.getMessage());
             SecurityContextHolder.clearContext();
         }
 

@@ -39,6 +39,9 @@ services:
     container_name: dressme-back
     env_file:
       - .env
+    environment:
+      - APP_SERVICES_AI_URL=http://dressme-ai:8000
+      - APP_SERVICES_DATABASE_URL=http://dressme-database:8080 # <-- NUEVA LÍNEA
     ports:
       - "8081:8080"
     depends_on:
@@ -47,7 +50,7 @@ services:
       - ./wardrobe-images:/app/images
     networks:
       - dressme-network
-
+      
   # 4. Microservicio Gateway (Público)
   dressme-gateway:
     build:
