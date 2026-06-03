@@ -16,4 +16,7 @@ public interface DatabaseDressCodeClient {
 
     @GetMapping("/internal/dress-codes/{id}/compatible")
     List<UUID> getCompatibleDressCodeIds(@PathVariable("id") UUID dressCodeId);
+
+    @GetMapping("/internal/dress-codes/{id}")
+    DressCodeDTO getDressCodeById(@PathVariable("id") UUID dressCodeId);
 }
