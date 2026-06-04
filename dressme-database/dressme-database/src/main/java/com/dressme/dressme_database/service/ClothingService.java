@@ -76,4 +76,10 @@ public interface ClothingService {
      * @param weatherId  clima seleccionado por el usuario para el outfit
      */
     List<ClothingEmbeddingDTO> getClothingForOutfit(UUID userId, UUID occasionId, UUID weatherId);
+
+    /**
+     * Persiste el embedding vectorial generado por dressme-ai tras el análisis de visión.
+     * Actualiza tbl_clothes.embedding_vector y marca is_embedding_stale = false.
+     */
+    void saveEmbedding(ClothingEmbeddingUpdateRequest request);
 }

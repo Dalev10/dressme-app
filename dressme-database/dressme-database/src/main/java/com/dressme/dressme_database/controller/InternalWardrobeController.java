@@ -61,6 +61,17 @@ public class InternalWardrobeController {
         return ResponseEntity.ok(clothingService.applyAiAudit(request));
     }
 
+    // ── Paso 3: Embedding vectorial ───────────────────────────────────────────
+
+    @PatchMapping("/{clothingId}/embedding")
+    public ResponseEntity<Void> saveEmbedding(
+            @PathVariable UUID clothingId,
+            @Valid @RequestBody ClothingEmbeddingUpdateRequest request) {
+        log.info("DB-Wardrobe: PATCH /{}/embedding — {} dims", clothingId, request.embeddingVector().size());
+        clothingService.saveEmbedding(request);
+        return ResponseEntity.noContent().build(); // 204
+    }
+
     // ── Lista resumida (grid del guardarropa) ─────────────────────────────────
 
     @GetMapping("/user/{userId}")
