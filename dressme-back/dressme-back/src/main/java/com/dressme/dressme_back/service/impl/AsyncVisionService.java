@@ -3,13 +3,25 @@ package com.dressme.dressme_back.service.impl;
 import com.dressme.dressme_back.schema.dto.AuditUpdateRequest;
 import com.dressme.dressme_back.schema.dto.VisionAnalysisResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.UUID;
 
+/**
+ * Servicio dedicado para el análisis de visión asíncrono.
+ *
+ * Existe como bean separado para que @Async sea interceptado por el proxy
+ * de Spring AOP. Si este método viviera en WardrobeOrchestratorServiceImpl
+ * y fuera llamado con "this.", Spring no proxearía la llamada y la ejecución
+ * sería síncrona, bloqueando el upload hasta el timeout de la IA (~10s).
+ */
 @Service
 @Slf4j
 public class AsyncVisionService {

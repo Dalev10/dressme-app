@@ -55,8 +55,10 @@ app:
     jwt-secret: 'dressme-secret-key-change-in-production-minimum-256-bits-required-12345'
 
   feign:
-    # CORREGIDO: Usando el nombre del servicio de red interna de Docker
     ai-service-url: 'http://dressme-ai:8000'
+
+  outfit-generation:
+    top-n: 5
 
 # ═══════════════════════════════════════════════════════════════════════════════════
 # SERVIDOR (Tomcat)
