@@ -150,14 +150,20 @@ public class OutfitOrchestratorServiceImpl implements OutfitOrchestratorService 
             scored.add(new ScoredEntry(outfitId, engineResult.totalScore()));
         }
 
-        // ── Paso 10: ordenar, tomar top-N ────────────────────────────────────
-        // TODO(cleanup): candidatos fuera del top-N quedan en DB con score bajo.
-        // Requiere añadir DELETE /internal/outfits/{id} a dressme-database
-        // (tarea separada — no pertenece a esta rama).
+        // ── Paso 10: ordenar, tomar top-N y eliminar el resto ────────────────
         scored.sort(Comparator.comparingDouble(ScoredEntry::totalScore).reversed());
         Set<UUID> topIds = scored.stream().limit(topN)
                 .map(ScoredEntry::outfitId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        scored.stream().skip(topN).forEach(entry -> {
+            try {
+                outfitClient.deleteOutfit(entry.outfitId(), userId);
+                log.debug("Outfit: candidato descartado eliminado — {}", entry.outfitId());
+            } catch (Exception e) {
+                log.warn("Outfit: no se pudo eliminar candidato {} — {}", entry.outfitId(), e.getMessage());
+            }
+        });
 
         // Devolver solo los top-N usando la lista del usuario (una sola llamada HTTP)
         List<OutfitResponse> all = outfitClient.getOutfitsByUser(userId);
