@@ -52,4 +52,11 @@ public interface DatabaseOutfitClient {
             @RequestParam("userId") UUID userId,
             @RequestBody OutfitRatingRequest request
     );
+
+    /** Elimina candidatos no seleccionados en el top-N tras la generación. */
+    @DeleteMapping("/internal/outfits/{outfitId}")
+    void deleteOutfit(
+            @PathVariable("outfitId") UUID outfitId,
+            @RequestParam("userId") UUID userId
+    );
 }
