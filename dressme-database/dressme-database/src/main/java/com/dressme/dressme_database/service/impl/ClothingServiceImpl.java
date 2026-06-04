@@ -474,6 +474,26 @@ public class ClothingServiceImpl implements ClothingService {
         return String.format("#%02X%02X%02X", r, g, b);
     }
 
+    @Override
+    @Transactional
+    public void saveEmbedding(ClothingEmbeddingUpdateRequest request) {
+        Clothing clothing = clothingRepository.findById(request.clothingId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Prenda no encontrada: " + request.clothingId()));
+
+        float[] vector = new float[request.embeddingVector().size()];
+        for (int i = 0; i < request.embeddingVector().size(); i++) {
+            vector[i] = request.embeddingVector().get(i);
+        }
+
+        clothing.setEmbeddingVector(vector);
+        clothing.setEmbeddingStale(false);
+        clothingRepository.save(clothing);
+
+        log.info("ClothingService: Embedding guardado para prenda {} ({} dims)",
+                request.clothingId(), vector.length);
+    }
+
     private float hueToRgb(float p, float q, float t) {
         if (t < 0) t += 1;
         if (t > 1) t -= 1;
