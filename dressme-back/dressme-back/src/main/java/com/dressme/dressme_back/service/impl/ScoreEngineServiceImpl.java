@@ -89,6 +89,62 @@ public class ScoreEngineServiceImpl implements ScoreEngineService {
         );
     }
 
+    @Override
+    public ScoreEngineResponse scoreFromComponents(
+            ColorScoreResponse precomputedColor,
+            double dresscodeScore,
+            double tasteScore,
+            TrendScoreResponse precomputedTrend) {
+
+        boolean colorApplies = precomputedColor.applies();
+        boolean trendApplies = precomputedTrend.applies();
+
+        double colorWeight     = colorBaseWeight;
+        double dresscodeWeight = dresscodeBaseWeight;
+        double tasteWeight     = tasteBaseWeight;
+        double trendWeight     = trendBaseWeight;
+
+        if (!colorApplies) {
+            double redistributed = colorWeight / 3.0;
+            colorWeight      = 0.0;
+            dresscodeWeight += redistributed;
+            tasteWeight     += redistributed;
+            trendWeight     += redistributed;
+        }
+
+        if (!trendApplies) {
+            int activeComponents = (colorApplies ? 1 : 0) + 2;
+            if (activeComponents > 0) {
+                double redistributedTrend = trendWeight / activeComponents;
+                trendWeight = 0.0;
+                if (colorApplies) colorWeight += redistributedTrend;
+                dresscodeWeight += redistributedTrend;
+                tasteWeight     += redistributedTrend;
+            }
+        }
+
+        List<ScoreComponent> components = new ArrayList<>();
+        components.add(component("color",     precomputedColor.score(),        colorWeight));
+        components.add(component("dresscode", dresscodeScore,                  dresscodeWeight));
+        components.add(component("taste",     tasteScore,                      tasteWeight));
+        components.add(component("trend",     precomputedTrend.trendScore(),   trendWeight));
+
+        double totalScore = components.stream()
+                .mapToDouble(ScoreComponent::weightedScore)
+                .sum();
+
+        return new ScoreEngineResponse(
+                totalScore,
+                colorApplies,
+                colorWeight,
+                dresscodeWeight,
+                tasteWeight,
+                trendWeight,
+                components,
+                precomputedColor
+        );
+    }
+
     private ScoreComponent component(String name, double rawScore, double weight) {
         return new ScoreComponent(name, rawScore, weight, rawScore * weight);
     }

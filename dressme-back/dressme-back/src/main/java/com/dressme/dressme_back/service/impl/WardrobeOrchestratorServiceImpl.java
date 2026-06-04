@@ -65,6 +65,18 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(new ParameterizedTypeReference<List<ClothingItemResponse>>() {});
     }
 
+    // ── Guardarropa para outfit generation (con embeddings) ───────────────────
+
+    @Override
+    public List<ClothingEmbeddingInfo> getWardrobeForOutfit(UUID userId, UUID occasionId, UUID weatherId) {
+        log.info("Wardrobe: getWardrobeForOutfit — usuario {}, ocasión {}, clima {}", userId, occasionId, weatherId);
+        return databaseClient.get()
+                .uri("/internal/wardrobe/user/{userId}/for-outfit?occasionId={occasionId}&weatherId={weatherId}",
+                        userId, occasionId, weatherId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<ClothingEmbeddingInfo>>() {});
+    }
+
     // ── Detalle compuesto ─────────────────────────────────────────────────────
 
     @Override
@@ -85,7 +97,6 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                                                   ClothingEditRequest request) {
         log.info("Wardrobe: Corrección manual — prenda {} usuario {}", clothingId, userId);
 
-        // Transformar ClothingEditRequest → ClothingUpdateRequest (contrato de dressme-database)
         ClothingUpdateRequest dbRequest = new ClothingUpdateRequest(
                 request.typeId(),
                 request.categoryId(),
@@ -97,45 +108,25 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(dbRequest)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new RuntimeException(
-                            "No se pudo actualizar la prenda: " + clothingId);
+                    throw new RuntimeException("No se pudo actualizar la prenda: " + clothingId);
                 })
                 .body(ClothingDetailResponse.class);
     }
-
-    
-    @Override
-    public WardrobeEditCatalogDTO getEditCatalog() {
-
-        log.info("Wardrobe: Solicitando catálogo de edición");
-
-        return databaseClient.get()
-                .uri("/internal/wardrobe/catalog/edit")
-                .retrieve()
-                .body(WardrobeEditCatalogDTO.class);
-   }
-
-
-
 
     // ── Eliminación ───────────────────────────────────────────────────────────
 
     @Override
     public void deleteClothing(UUID clothingId, UUID userId) {
-        // 1. Obtener imageUrl antes de borrar (para limpiar el volumen)
         ClothingDetailResponse detail = getClothingDetail(clothingId);
 
-        // 2. Eliminar en dressme-database (verifica ownership)
         databaseClient.delete()
                 .uri("/internal/wardrobe/{clothingId}?userId={userId}", clothingId, userId)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new RuntimeException(
-                            "No se pudo eliminar la prenda: " + clothingId);
+                    throw new RuntimeException("No se pudo eliminar la prenda: " + clothingId);
                 })
                 .toBodilessEntity();
 
-        // 3. Eliminar imagen del volumen Docker
         if (detail != null && detail.imageUrl() != null) {
             storageService.delete(detail.imageUrl());
         }
@@ -153,7 +144,12 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(CatalogDTO.class);
     }
 
-    // ── Inner record de request a dressme-ai ─────────────────────────────────
-
-    private record VisionAnalysisRequest(UUID clothingId, String imageUrl) {}
+    @Override
+    public WardrobeEditCatalogDTO getEditCatalog() {
+        log.info("Wardrobe: Solicitando catálogo de edición");
+        return databaseClient.get()
+                .uri("/internal/wardrobe/catalog/edit")
+                .retrieve()
+                .body(WardrobeEditCatalogDTO.class);
+    }
 }
