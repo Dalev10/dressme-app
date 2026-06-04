@@ -46,6 +46,10 @@ spring:
 # CONFIGURACIÓN PERSONALIZADA DE DRESSME
 # ═══════════════════════════════════════════════════════════════════════════════════
 
+storage:
+  path: /app/images
+  base-url: http://dressme-back:8080/images
+
 app:
   security:
     jwt-secret: 'dressme-secret-key-change-in-production-minimum-256-bits-required-12345'

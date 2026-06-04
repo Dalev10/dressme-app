@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,19 +18,19 @@ import java.util.UUID;
 @Slf4j
 public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorService {
 
-    private final StorageService storageService;
-    private final RestClient     databaseClient;
-    private final RestClient     aiClient;
+    private final StorageService    storageService;
+    private final RestClient        databaseClient;
+    private final AsyncVisionService asyncVisionService;
 
     public WardrobeOrchestratorServiceImpl(
             StorageService storageService,
             RestClient.Builder restClientBuilder,
-            @Value("${app.services.database-url}") String databaseUrl,
-            @Value("${app.services.ai-url}")       String aiUrl
+            AsyncVisionService asyncVisionService,
+            @Value("${app.services.database-url}") String databaseUrl
     ) {
-        this.storageService = storageService;
-        this.databaseClient = restClientBuilder.baseUrl(databaseUrl).build();
-        this.aiClient       = restClientBuilder.baseUrl(aiUrl).build();
+        this.storageService      = storageService;
+        this.databaseClient      = restClientBuilder.baseUrl(databaseUrl).build();
+        this.asyncVisionService  = asyncVisionService;
     }
 
     // ── Upload ────────────────────────────────────────────────────────────────
@@ -52,70 +51,8 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(ClothingItemResponse.class);
 
         log.info("Wardrobe: Prenda {} registrada — disparando análisis IA", created.id());
-        triggerVisionAnalysis(created.id(), imageUrl);
+        asyncVisionService.triggerVisionAnalysis(created.id(), imageUrl);
         return created;
-    }
-
-    @Async
-    protected void triggerVisionAnalysis(UUID clothingId, String imageUrl) {
-        log.info("Back-Wardrobe[async]: Enviando {} a dressme-ai", clothingId);
-        try {
-            VisionAnalysisResponse aiResponse = aiClient.post()
-                    .uri("/ai/wardrobe/analyze")
-                    .body(new VisionAnalysisRequest(clothingId, imageUrl))
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, (req, res) -> {
-                        throw new RuntimeException(
-                                "dressme-ai falló para prenda " + clothingId);
-                    })
-                    .body(VisionAnalysisResponse.class);
-
-            log.info("Back-Wardrobe[async]: Respuesta recibida de dressme-ai: clothingId={}, predictedCategoryId={}, predictedStyleId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}, predictedWeatherId={}, predictedOccasionId={}, confidence={}, aiProvider={}",
-                    aiResponse.clothingId(),
-                    aiResponse.predictedCategoryId(),
-                    aiResponse.predictedStyleId(),
-                    aiResponse.predictedColorId(),
-                    aiResponse.detectedHue(),
-                    aiResponse.detectedSaturation(),
-                    aiResponse.detectedLightness(),
-                    aiResponse.predictedWeatherId(),
-                    aiResponse.predictedOccasionId(),
-                    aiResponse.confidenceScore(),
-                    aiResponse.aiProvider());
-
-            AuditUpdateRequest auditRequest = new AuditUpdateRequest(
-                    aiResponse.clothingId(),
-                    aiResponse.predictedCategoryId(),
-                    aiResponse.predictedStyleId(),
-                    aiResponse.predictedColorId(),
-                    aiResponse.detectedHue(),
-                    aiResponse.detectedSaturation(),
-                    aiResponse.detectedLightness(),
-                    aiResponse.predictedWeatherId(),
-                    aiResponse.predictedOccasionId(),
-                    aiResponse.confidenceScore(),
-                    aiResponse.aiProvider());
-
-            log.info("Back-Wardrobe[async]: Enviando audit a dressme-database: clothingId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}",
-                    auditRequest.clothingId(),
-                    auditRequest.predictedColorId(),
-                    auditRequest.detectedHue(),
-                    auditRequest.detectedSaturation(),
-                    auditRequest.detectedLightness());
-
-            databaseClient.patch()
-                    .uri("/internal/wardrobe/audit")
-                    .body(auditRequest)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            log.info("Back-Wardrobe[async]: Audit aplicado exitosamente para prenda {}", clothingId);
-
-        } catch (Exception e) {
-            log.error("Back-Wardrobe[async]: Error analizando prenda {}: {}", clothingId,
-                    e.getMessage());
-            // La prenda queda isProcessed=false; re-análisis futuro la puede recuperar.
-        }
     }
 
     // ── Lista resumida ────────────────────────────────────────────────────────
