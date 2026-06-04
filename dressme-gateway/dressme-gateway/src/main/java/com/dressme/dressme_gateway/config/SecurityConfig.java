@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
@@ -30,11 +31,23 @@ public class SecurityConfig {
     }
 
     @Bean
-    public UrlBasedCorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:5174"));
+        
+        // 1. Orígenes permitidos (Tu frontend en Vercel y entornos locales)
+        config.setAllowedOrigins(List.of(
+            "https://dressme-front-silk.vercel.app", 
+            "http://localhost:5173", 
+            "http://localhost:5174"
+        ));
+        
+        // 2. Métodos HTTP permitidos (Importante mantener PATCH para tu FeignClient)
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        
+        // 3. Cabeceras permitidas (El "*" evita bloqueos de Content-Type o Authorization)
         config.setAllowedHeaders(List.of("*"));
+        
+        // 4. Permitir credenciales (Crucial para enviar tokens o cookies)
         config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

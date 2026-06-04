@@ -18,8 +18,8 @@ import java.util.UUID;
 @Slf4j
 public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorService {
 
-    private final StorageService     storageService;
-    private final RestClient         databaseClient;
+    private final StorageService    storageService;
+    private final RestClient        databaseClient;
     private final AsyncVisionService asyncVisionService;
 
     public WardrobeOrchestratorServiceImpl(
@@ -28,9 +28,9 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
             AsyncVisionService asyncVisionService,
             @Value("${app.services.database-url}") String databaseUrl
     ) {
-        this.storageService     = storageService;
-        this.databaseClient     = restClientBuilder.baseUrl(databaseUrl).build();
-        this.asyncVisionService = asyncVisionService;
+        this.storageService      = storageService;
+        this.databaseClient      = restClientBuilder.baseUrl(databaseUrl).build();
+        this.asyncVisionService  = asyncVisionService;
     }
 
     // ── Upload ────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 })
                 .body(ClothingItemResponse.class);
 
-        log.info("Wardrobe: Prenda {} registrada — disparando análisis IA async", created.id());
+        log.info("Wardrobe: Prenda {} registrada — disparando análisis IA", created.id());
         asyncVisionService.triggerVisionAnalysis(created.id(), imageUrl);
         return created;
     }
