@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,19 +18,19 @@ import java.util.UUID;
 @Slf4j
 public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorService {
 
-    private final StorageService storageService;
-    private final RestClient     databaseClient;
-    private final RestClient     aiClient;
+    private final StorageService     storageService;
+    private final RestClient         databaseClient;
+    private final AsyncVisionService asyncVisionService;
 
     public WardrobeOrchestratorServiceImpl(
             StorageService storageService,
             RestClient.Builder restClientBuilder,
-            @Value("${app.services.database-url}") String databaseUrl,
-            @Value("${app.services.ai-url}")       String aiUrl
+            AsyncVisionService asyncVisionService,
+            @Value("${app.services.database-url}") String databaseUrl
     ) {
-        this.storageService = storageService;
-        this.databaseClient = restClientBuilder.baseUrl(databaseUrl).build();
-        this.aiClient       = restClientBuilder.baseUrl(aiUrl).build();
+        this.storageService     = storageService;
+        this.databaseClient     = restClientBuilder.baseUrl(databaseUrl).build();
+        this.asyncVisionService = asyncVisionService;
     }
 
     // ── Upload ────────────────────────────────────────────────────────────────
@@ -51,71 +50,9 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 })
                 .body(ClothingItemResponse.class);
 
-        log.info("Wardrobe: Prenda {} registrada — disparando análisis IA", created.id());
-        triggerVisionAnalysis(created.id(), imageUrl);
+        log.info("Wardrobe: Prenda {} registrada — disparando análisis IA async", created.id());
+        asyncVisionService.triggerVisionAnalysis(created.id(), imageUrl);
         return created;
-    }
-
-    @Async
-    protected void triggerVisionAnalysis(UUID clothingId, String imageUrl) {
-        log.info("Back-Wardrobe[async]: Enviando {} a dressme-ai", clothingId);
-        try {
-            VisionAnalysisResponse aiResponse = aiClient.post()
-                    .uri("/ai/wardrobe/analyze")
-                    .body(new VisionAnalysisRequest(clothingId, imageUrl))
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, (req, res) -> {
-                        throw new RuntimeException(
-                                "dressme-ai falló para prenda " + clothingId);
-                    })
-                    .body(VisionAnalysisResponse.class);
-
-            log.info("Back-Wardrobe[async]: Respuesta recibida de dressme-ai: clothingId={}, predictedCategoryId={}, predictedStyleId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}, predictedWeatherId={}, predictedOccasionId={}, confidence={}, aiProvider={}",
-                    aiResponse.clothingId(),
-                    aiResponse.predictedCategoryId(),
-                    aiResponse.predictedStyleId(),
-                    aiResponse.predictedColorId(),
-                    aiResponse.detectedHue(),
-                    aiResponse.detectedSaturation(),
-                    aiResponse.detectedLightness(),
-                    aiResponse.predictedWeatherId(),
-                    aiResponse.predictedOccasionId(),
-                    aiResponse.confidenceScore(),
-                    aiResponse.aiProvider());
-
-            AuditUpdateRequest auditRequest = new AuditUpdateRequest(
-                    aiResponse.clothingId(),
-                    aiResponse.predictedCategoryId(),
-                    aiResponse.predictedStyleId(),
-                    aiResponse.predictedColorId(),
-                    aiResponse.detectedHue(),
-                    aiResponse.detectedSaturation(),
-                    aiResponse.detectedLightness(),
-                    aiResponse.predictedWeatherId(),
-                    aiResponse.predictedOccasionId(),
-                    aiResponse.confidenceScore(),
-                    aiResponse.aiProvider());
-
-            log.info("Back-Wardrobe[async]: Enviando audit a dressme-database: clothingId={}, predictedColorId={}, detectedHue={}, detectedSaturation={}, detectedLightness={}",
-                    auditRequest.clothingId(),
-                    auditRequest.predictedColorId(),
-                    auditRequest.detectedHue(),
-                    auditRequest.detectedSaturation(),
-                    auditRequest.detectedLightness());
-
-            databaseClient.patch()
-                    .uri("/internal/wardrobe/audit")
-                    .body(auditRequest)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            log.info("Back-Wardrobe[async]: Audit aplicado exitosamente para prenda {}", clothingId);
-
-        } catch (Exception e) {
-            log.error("Back-Wardrobe[async]: Error analizando prenda {}: {}", clothingId,
-                    e.getMessage());
-            // La prenda queda isProcessed=false; re-análisis futuro la puede recuperar.
-        }
     }
 
     // ── Lista resumida ────────────────────────────────────────────────────────
@@ -126,6 +63,18 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .uri("/internal/wardrobe/user/{userId}", userId)
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<ClothingItemResponse>>() {});
+    }
+
+    // ── Guardarropa para outfit generation (con embeddings) ───────────────────
+
+    @Override
+    public List<ClothingEmbeddingInfo> getWardrobeForOutfit(UUID userId, UUID occasionId, UUID weatherId) {
+        log.info("Wardrobe: getWardrobeForOutfit — usuario {}, ocasión {}, clima {}", userId, occasionId, weatherId);
+        return databaseClient.get()
+                .uri("/internal/wardrobe/user/{userId}/for-outfit?occasionId={occasionId}&weatherId={weatherId}",
+                        userId, occasionId, weatherId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<ClothingEmbeddingInfo>>() {});
     }
 
     // ── Detalle compuesto ─────────────────────────────────────────────────────
@@ -148,7 +97,6 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                                                   ClothingEditRequest request) {
         log.info("Wardrobe: Corrección manual — prenda {} usuario {}", clothingId, userId);
 
-        // Transformar ClothingEditRequest → ClothingUpdateRequest (contrato de dressme-database)
         ClothingUpdateRequest dbRequest = new ClothingUpdateRequest(
                 request.typeId(),
                 request.categoryId(),
@@ -160,45 +108,25 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(dbRequest)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new RuntimeException(
-                            "No se pudo actualizar la prenda: " + clothingId);
+                    throw new RuntimeException("No se pudo actualizar la prenda: " + clothingId);
                 })
                 .body(ClothingDetailResponse.class);
     }
-
-    
-    @Override
-    public WardrobeEditCatalogDTO getEditCatalog() {
-
-        log.info("Wardrobe: Solicitando catálogo de edición");
-
-        return databaseClient.get()
-                .uri("/internal/wardrobe/catalog/edit")
-                .retrieve()
-                .body(WardrobeEditCatalogDTO.class);
-   }
-
-
-
 
     // ── Eliminación ───────────────────────────────────────────────────────────
 
     @Override
     public void deleteClothing(UUID clothingId, UUID userId) {
-        // 1. Obtener imageUrl antes de borrar (para limpiar el volumen)
         ClothingDetailResponse detail = getClothingDetail(clothingId);
 
-        // 2. Eliminar en dressme-database (verifica ownership)
         databaseClient.delete()
                 .uri("/internal/wardrobe/{clothingId}?userId={userId}", clothingId, userId)
                 .retrieve()
                 .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                    throw new RuntimeException(
-                            "No se pudo eliminar la prenda: " + clothingId);
+                    throw new RuntimeException("No se pudo eliminar la prenda: " + clothingId);
                 })
                 .toBodilessEntity();
 
-        // 3. Eliminar imagen del volumen Docker
         if (detail != null && detail.imageUrl() != null) {
             storageService.delete(detail.imageUrl());
         }
@@ -216,7 +144,12 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(CatalogDTO.class);
     }
 
-    // ── Inner record de request a dressme-ai ─────────────────────────────────
-
-    private record VisionAnalysisRequest(UUID clothingId, String imageUrl) {}
+    @Override
+    public WardrobeEditCatalogDTO getEditCatalog() {
+        log.info("Wardrobe: Solicitando catálogo de edición");
+        return databaseClient.get()
+                .uri("/internal/wardrobe/catalog/edit")
+                .retrieve()
+                .body(WardrobeEditCatalogDTO.class);
+    }
 }

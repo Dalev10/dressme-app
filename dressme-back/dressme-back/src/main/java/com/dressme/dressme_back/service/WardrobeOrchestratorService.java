@@ -37,4 +37,7 @@ public interface WardrobeOrchestratorService {
     CatalogDTO getCatalog();
 
     WardrobeEditCatalogDTO getEditCatalog();
+
+    /** Guardarropa filtrado por ocasión y clima, con embeddings, para outfit generation. */
+    List<ClothingEmbeddingInfo> getWardrobeForOutfit(UUID userId, UUID occasionId, UUID weatherId);
 }
