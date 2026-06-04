@@ -31,22 +31,11 @@ public class AsyncVisionService {
 
     public AsyncVisionService(
             RestClient.Builder restClientBuilder,
-            @Value("${app.services.database-url}") String databaseUrl,
-            @Value("${app.services.ai-url}")       String aiUrl
+            @org.springframework.beans.factory.annotation.Value("${app.services.database-url}") String databaseUrl,
+            @org.springframework.beans.factory.annotation.Value("${app.services.ai-url}") String aiUrl
     ) {
         this.databaseClient = restClientBuilder.clone().baseUrl(databaseUrl).build();
-
-        // Gemini Vision puede tardar hasta 30s en analizar una imagen.
-        // El RestClient hereda el timeout de OkHttp (10s) vía Feign en classpath.
-        // Creamos el cliente de IA con JdkClientHttpRequestFactory y 35s explícitos.
-        JdkClientHttpRequestFactory aiFactory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
-        );
-        aiFactory.setReadTimeout(Duration.ofSeconds(35));
-        this.aiClient = RestClient.builder()
-                .requestFactory(aiFactory)
-                .baseUrl(aiUrl)
-                .build();
+        this.aiClient       = restClientBuilder.clone().baseUrl(aiUrl).build();
     }
 
     @Async
