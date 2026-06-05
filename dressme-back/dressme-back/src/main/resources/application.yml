@@ -73,6 +73,15 @@ server:
 # LOGGING (Reducido para evitar saturación de consola en Docker)
 # ═══════════════════════════════════════════════════════════════════════════════════
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 logging:
   level:
     root: INFO
