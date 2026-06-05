@@ -110,3 +110,6 @@ spring:
 app:
   security:
     jwt-secret: ${JWT_SECRET}
+  services:
+    database-url: ${DATABASE_SERVICE_URL}
+    ai-url: ${AI_SERVICE_URL}
