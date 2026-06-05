@@ -107,18 +107,18 @@ CATALOG — STYLES:
 CATALOG — COLORS (choose the closest match to the detected color):
 {fmt(catalog.colors)}
 
-CATALOG — WEATHER (most suitable condition for this garment):
+CATALOG — WEATHER (all suitable conditions for this garment — include every applicable option):
 {fmt(catalog.weathers)}
 
-CATALOG — OCCASIONS (most suitable occasion):
+CATALOG — OCCASIONS (all suitable occasions for this garment — include every applicable option):
 {fmt(catalog.occasions)}
 
 REQUIRED JSON FORMAT:
 {{
-  "category_id":  "<uuid from CATEGORIES>",
-  "style_id":     "<uuid from STYLES>",
-  "weather_id":   "<uuid from WEATHER>",
-  "occasion_id":  "<uuid from OCCASIONS>",
+  "category_id":   "<uuid from CATEGORIES>",
+  "style_id":      "<uuid from STYLES>",
+  "weather_ids":   ["<uuid from WEATHER>", ...],
+  "occasion_ids":  ["<uuid from OCCASIONS>", ...],
   "color": {{
     "catalog_id": "<uuid from COLORS>",
     "hue":        <integer 0-360>,
@@ -126,7 +126,9 @@ REQUIRED JSON FORMAT:
     "lightness":  <integer 0-100>
   }},
   "confidence": <float 0.0-1.0>
-}}"""
+}}
+
+IMPORTANT: weather_ids and occasion_ids MUST be arrays, even if there is only one value."""
 
     def _parse_response(self, raw_text: str) -> dict:
         cleaned = re.sub(r"```(?:json)?", "", raw_text).strip()
@@ -135,7 +137,7 @@ REQUIRED JSON FORMAT:
         except json.JSONDecodeError as e:
             raise ValueError(f"Gemini no devolvió JSON válido. Raw: {raw_text!r}. Error: {e}") from e
 
-        required_root  = {"category_id", "style_id", "weather_id", "occasion_id", "color", "confidence"}
+        required_root  = {"category_id", "style_id", "weather_ids", "occasion_ids", "color", "confidence"}
         required_color = {"catalog_id", "hue", "saturation", "lightness"}
 
         if missing := required_root - set(data.keys()):
@@ -143,11 +145,20 @@ REQUIRED JSON FORMAT:
         if missing_color := required_color - set(data["color"].keys()):
             raise ValueError(f"Gemini omitió campos del color: {missing_color}")
 
-        for key in ("category_id", "style_id", "weather_id", "occasion_id"):
+        for key in ("category_id", "style_id"):
             try:
                 UUID(str(data[key]))
             except ValueError:
                 raise ValueError(f"'{data[key]}' para '{key}' no es un UUID válido.")
+
+        for list_key in ("weather_ids", "occasion_ids"):
+            if not isinstance(data[list_key], list) or len(data[list_key]) == 0:
+                raise ValueError(f"'{list_key}' debe ser una lista no vacía.")
+            for uid in data[list_key]:
+                try:
+                    UUID(str(uid))
+                except ValueError:
+                    raise ValueError(f"'{uid}' en '{list_key}' no es un UUID válido.")
 
         try:
             UUID(str(data["color"]["catalog_id"]))
@@ -170,8 +181,8 @@ REQUIRED JSON FORMAT:
             clothing_id=clothing_id,
             predicted_category_id=UUID(data["category_id"]),
             predicted_style_id=UUID(data["style_id"]),
-            predicted_weather_id=UUID(data["weather_id"]),
-            predicted_occasion_id=UUID(data["occasion_id"]),
+            predicted_weather_ids=[UUID(str(w)) for w in data["weather_ids"]],
+            predicted_occasion_ids=[UUID(str(o)) for o in data["occasion_ids"]],
             detected_color_hsl=DetectedColorHSL(
                 hue=int(c["hue"]),
                 saturation=int(c["saturation"]),
@@ -197,8 +208,8 @@ REQUIRED JSON FORMAT:
             clothing_id=clothing_id,
             predicted_category_id=UUID(uncategorized["id"]) if uncategorized else first(catalog.categories),
             predicted_style_id=first(catalog.styles),
-            predicted_weather_id=first(catalog.weathers),
-            predicted_occasion_id=first(catalog.occasions),
+            predicted_weather_ids=[first(catalog.weathers)],
+            predicted_occasion_ids=[first(catalog.occasions)],
             detected_color_hsl=DetectedColorHSL(
                 hue=0, saturation=0, lightness=50,
                 color_catalog_id=first(catalog.colors),

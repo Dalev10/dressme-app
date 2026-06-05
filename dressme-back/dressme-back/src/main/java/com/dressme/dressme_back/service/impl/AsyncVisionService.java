@@ -78,8 +78,8 @@ public class AsyncVisionService {
                             aiResponse.detectedHue(),
                             aiResponse.detectedSaturation(),
                             aiResponse.detectedLightness(),
-                            aiResponse.predictedWeatherId(),
-                            aiResponse.predictedOccasionId(),
+                            aiResponse.predictedWeatherIds(),
+                            aiResponse.predictedOccasionIds(),
                             aiResponse.confidenceScore(),
                             aiResponse.aiProvider()))
                     .retrieve()

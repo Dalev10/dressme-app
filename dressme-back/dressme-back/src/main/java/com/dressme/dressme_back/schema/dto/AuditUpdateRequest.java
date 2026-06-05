@@ -4,9 +4,11 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -52,13 +54,13 @@ public record AuditUpdateRequest(
     @NotNull(message = "El lightness detectado es obligatorio")
     Integer detectedLightness,
 
-    /** Condición climática predicha (debe existir en tbl_weather) */
-    @NotNull(message = "El clima predicho es obligatorio")
-    UUID predictedWeatherId,
+    /** Condiciones climáticas predichas (al menos una; deben existir en tbl_weather) */
+    @NotEmpty(message = "Al menos un clima predicho es obligatorio")
+    List<UUID> predictedWeatherIds,
 
-    /** Ocasión predicha (debe existir en tbl_occasions) */
-    @NotNull(message = "La ocasión predicha es obligatoria")
-    UUID predictedOccasionId,
+    /** Ocasiones predichas (al menos una; deben existir en tbl_occasions) */
+    @NotEmpty(message = "Al menos una ocasión predicha es obligatoria")
+    List<UUID> predictedOccasionIds,
 
     /** Score de confianza del modelo [0.00 – 1.00] */
     @NotNull
