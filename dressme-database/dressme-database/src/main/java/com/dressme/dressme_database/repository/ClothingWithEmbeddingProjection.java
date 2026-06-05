@@ -16,24 +16,28 @@ import java.util.UUID;
  *
  * Campos del query JPQL correspondiente (findForOutfitGeneration):
  *   c.id              → getClothingId()
- *   cat.parent.name   → getSlot()          (nombre de categoría padre)
+ *   cat.name          → getCategoryName()   (categoría hoja, ej. "T-Shirt")
+ *   cat.parent.name   → getParentName()     (categoría padre, null si la hoja es raíz)
  *   audit.detectedHue → getDetectedHue()
  *   audit.detectedSaturation → getDetectedSaturation()
  *   audit.detectedLightness  → getDetectedLightness()
  *   o.name            → getOccasionName()
  *   w.name            → getWeatherName()
+ *
+ * El slot canónico (TOP/BOTTOM/OUTERWEAR/FOOTWEAR/ONEPIECE) se resuelve en
+ * ClothingServiceImpl con CategorySlotMapper.toSlot(categoryName, parentName),
+ * que maneja el caso de "Activewear" (hijos en slots distintos).
  */
 public interface ClothingWithEmbeddingProjection {
 
     /** UUID de la prenda (tbl_clothes.id) */
     UUID getClothingId();
 
-    /**
-     * Nombre del slot derivado de la categoría padre.
-     * Si la categoría es raíz (parent = null), el query usa cat.name directamente.
-     * Ver COALESCE en findForOutfitGeneration.
-     */
-    String getSlot();
+    /** Nombre de la categoría hoja de la prenda (ej. "T-Shirt", "Sports Bra"). */
+    String getCategoryName();
+
+    /** Nombre de la categoría padre, o null si la categoría hoja es raíz. */
+    String getParentName();
 
     /** Hue HSL detectado por Vision [0–360]. Puede ser null si el audit no lo registró. */
     Integer getDetectedHue();
