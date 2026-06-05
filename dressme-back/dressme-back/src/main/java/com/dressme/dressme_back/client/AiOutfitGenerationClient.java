@@ -20,6 +20,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 @FeignClient(name = "dressme-ai-outfit-client", url = "${app.services.ai-url}")
 public interface AiOutfitGenerationClient {
 
-    @PostMapping("/internal/ai/outfit/generate")
+    @PostMapping("/ai/outfit/generate/orchestrated")
     AiOutfitGenerationResponse generateOutfits(@RequestBody AiOutfitGenerationRequest request);
 }
