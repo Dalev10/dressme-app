@@ -28,6 +28,10 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
             AsyncVisionService asyncVisionService,
             @Value("${app.services.database-url}") String databaseUrl
     ) {
+        if (databaseUrl == null || databaseUrl.isBlank()) {
+            throw new IllegalStateException("app.services.database-url is empty — set DATABASE_SERVICE_URL env var");
+        }
+        log.info("WardrobeOrchestrator: database URL = {}", databaseUrl);
         this.storageService      = storageService;
         this.databaseClient      = restClientBuilder.baseUrl(databaseUrl).build();
         this.asyncVisionService  = asyncVisionService;
