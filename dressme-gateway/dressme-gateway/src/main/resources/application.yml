@@ -22,3 +22,12 @@ app:
 google:
   oauth:
     userinfo-url: https://www.googleapis.com/oauth2/v3/userinfo
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
