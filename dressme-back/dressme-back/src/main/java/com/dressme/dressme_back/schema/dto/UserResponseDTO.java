@@ -16,7 +16,6 @@ public class UserResponseDTO {
     private String email;
     private String displayName;
     private String profilePicture;
-    private float[] tasteVector;
 
     @JsonProperty("isCalibrated") // Forzamos el nombre exacto para que coincidan
     private boolean isCalibrated;

@@ -12,21 +12,18 @@ public class UserUpdateRequest {
     private String profilePicture;
     private Boolean isCalibrated;
     private float[] tasteVector;
-    private String sourceType;  
 
     @JsonCreator // Obligamos a Jackson a usar este constructor
     public UserUpdateRequest(
         @JsonProperty("displayName") String displayName,
         @JsonProperty("profilePicture") String profilePicture,
         @JsonProperty("isCalibrated") Boolean isCalibrated,
-        @JsonProperty("tasteVector") float[] tasteVector,
-        @JsonProperty("sourceType") String sourceType
+        @JsonProperty("tasteVector") float[] tasteVector
     ) {
         this.displayName = displayName;
         this.profilePicture = profilePicture;
         this.isCalibrated = isCalibrated;
         this.tasteVector = tasteVector;
-        this.sourceType = sourceType;
     }
 
     public UserUpdateRequest() {} // Constructor vacío necesario

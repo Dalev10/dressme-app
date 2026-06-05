@@ -30,7 +30,7 @@ public class UserIdentity {
     @Column(name = "provider_user_id", unique = true, nullable = false)
     private String providerUserId;
 
-    @Column(name = "access_token", columnDefinition = "TEXT")
+    @Column(name = "access_token", columnDefinition = "TEXT", nullable = false)
     private String accessToken;
 
     @Column(name = "refresh_token", columnDefinition = "TEXT")

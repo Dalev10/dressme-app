@@ -1,7 +1,10 @@
 package com.dressme.dressme_gateway.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -17,41 +20,74 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // LÍNEA DE ORO: Si no ves esto en el log de Docker, la config no existe para Spring
+        log.info("********** GATEWAY: CARGANDO CONFIGURACIÓN DE SEGURIDAD PERSONALIZADA **********");
+        
         http
+            // 1. Deshabilitar CSRF: Esencial para APIs REST que no usan cookies de sesión,
+            // evitando que Spring Security bloquee los POST/PUT.
             .csrf(AbstractHttpConfigurer::disable)
+            
+            // 2. Configurar CORS: Permite que el Frontend (en otro puerto/dominio) 
+            // pueda consumir los recursos del Gateway.
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .sessionManagement(session ->
-                    session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            
+            // 3. Política Stateless: El Gateway no guardará estado de sesión en el servidor.
+            // Cada petición es independiente.
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            
+            // 4. Reglas de Autorización: Definimos quién puede entrar a qué rutas.
             .authorizeHttpRequests(auth -> auth
-                .anyRequest().permitAll()
+                // --- RUTAS PÚBLICAS (Lista Blanca) ---
+                
+                // Acceso total a la documentación de Swagger y OpenAPI
+                .requestMatchers(
+                        "/v3/api-docs/**", 
+                        "/swagger-ui/**", 
+                        "/swagger-ui.html"
+                ).permitAll()
+                
+                // Permitir el flujo de Login con Google
+                .requestMatchers("/api/v1/auth/login").permitAll()
+                
+                // Permitir GET, PATCH y DELETE en el perfil de usuario para el MVP
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/profile/**").permitAll()
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/users/profile/**").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/users/profile/**").permitAll() 
+                
+                // --- RUTAS PROTEGIDAS ---
+                
+                // Cualquier otra petición que no esté arriba requerirá autenticación.
+                .anyRequest().authenticated()
             );
+
         return http.build();
     }
 
+    /**
+     * Configuración de CORS (Cross-Origin Resource Sharing).
+     * Define las reglas de interacción con orígenes externos.
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
+        CorsConfiguration configuration = new CorsConfiguration();
         
-        // 1. Orígenes permitidos (Tu frontend en Vercel y entornos locales)
-        config.setAllowedOrigins(List.of(
-            "https://dressme-front-silk.vercel.app", 
-            "http://localhost:5173", 
-            "http://localhost:5174"
-        ));
+        // Durante el desarrollo MVP permitimos todos los orígenes ("*").
+        // En producción se limitaría a "https://midominio.com".
+        configuration.setAllowedOrigins(List.of("*")); 
         
-        // 2. Métodos HTTP permitidos (Importante mantener PATCH para tu FeignClient)
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        // Métodos HTTP permitidos
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         
-        // 3. Cabeceras permitidas (El "*" evita bloqueos de Content-Type o Authorization)
-        config.setAllowedHeaders(List.of("*"));
+        // Cabeceras permitidas para el envío de Tokens (Authorization) y JSON
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         
-        // 4. Permitir credenciales (Crucial para enviar tokens o cookies)
-        config.setAllowCredentials(true);
-
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 }

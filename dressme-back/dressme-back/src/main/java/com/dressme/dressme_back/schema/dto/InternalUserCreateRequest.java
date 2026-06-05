@@ -6,6 +6,5 @@ public record InternalUserCreateRequest(
     String profilePictureUrl,
     String provider,
     String providerId,
-    float[] initialTasteVector
-) {
-}
+    float[] initialTasteVector // Aquí inyectaremos los 1536 ceros
+) {}
