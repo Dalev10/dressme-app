@@ -5,6 +5,7 @@ import com.dressme.dressme_database.model.*;
 import com.dressme.dressme_database.repository.*;
 import com.dressme.dressme_database.schema.dto.*;
 import com.dressme.dressme_database.service.ClothingService;
+import com.dressme.dressme_database.util.CategorySlotMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -382,6 +383,16 @@ public class ClothingServiceImpl implements ClothingService {
                 continue;
             }
 
+            // Resolver el slot canónico (TOP/BOTTOM/OUTERWEAR/FOOTWEAR/ONEPIECE).
+            // null = accesorio o categoría no apta para outfit → se omite.
+            String slot = CategorySlotMapper.toSlot(p.getCategoryName(), p.getParentName());
+            if (slot == null) {
+                log.debug("ClothingService: prenda {} omitida — categoría '{}' (padre '{}') " +
+                          "no mapea a un slot de outfit",
+                          p.getClothingId(), p.getCategoryName(), p.getParentName());
+                continue;
+            }
+
             // Convertir float[] → List<Float> para el contrato del DTO
             List<Float> embeddingList = new ArrayList<>(rawVector.length);
             for (float v : rawVector) {
@@ -390,7 +401,7 @@ public class ClothingServiceImpl implements ClothingService {
 
             result.add(new ClothingEmbeddingDTO(
                     p.getClothingId(),
-                    p.getSlot(),
+                    slot,
                     p.getDetectedHue(),
                     p.getDetectedSaturation(),
                     p.getDetectedLightness(),

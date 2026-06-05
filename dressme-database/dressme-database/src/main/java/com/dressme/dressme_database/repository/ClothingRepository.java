@@ -55,10 +55,10 @@ public interface ClothingRepository extends JpaRepository<Clothing, UUID> {
      *   - join con tbl_clothes_occasions → filtra por occasionId
      *   - join con tbl_clothes_weather  → filtra por weatherId
      *
-     * El slot se deriva de la jerarquía de categorías:
-     *   COALESCE(cat.parent.name, cat.name) — si la prenda tiene subcategoría
-     *   (ej: "T-Shirt" cuyo padre es "TOP"), el slot es el nombre del padre.
-     *   Si la categoría es raíz (parent = null), se usa el nombre de la categoría directamente.
+     * El query devuelve la categoría hoja (cat.name) y la padre (cat.parent.name).
+     * El slot canónico (TOP/BOTTOM/OUTERWEAR/FOOTWEAR/ONEPIECE) lo resuelve
+     * ClothingServiceImpl con CategorySlotMapper, que maneja el caso "Activewear"
+     * (cuyos hijos caen en slots distintos) y excluye accesorios.
      *
      * Solo se retornan los campos necesarios para ClothingEmbeddingDTO via proyección.
      * El embedding_vector se hidrata en ClothingServiceImpl en un segundo paso
@@ -72,7 +72,8 @@ public interface ClothingRepository extends JpaRepository<Clothing, UUID> {
     @Query("""
         SELECT
             c.id                                            AS clothingId,
-            COALESCE(cat.parent.name, cat.name)             AS slot,
+            cat.name                                        AS categoryName,
+            cat.parent.name                                 AS parentName,
             audit.detectedHue                               AS detectedHue,
             audit.detectedSaturation                        AS detectedSaturation,
             audit.detectedLightness                         AS detectedLightness,
