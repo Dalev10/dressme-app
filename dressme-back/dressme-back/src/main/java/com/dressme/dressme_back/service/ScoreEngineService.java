@@ -14,10 +14,14 @@ public interface ScoreEngineService {
      * Calcula totalScore con scores ya pre-computados — sin llamadas HTTP adicionales.
      * Usado por OutfitOrchestratorService para evitar re-calcular color y trend
      * cuando ya se computaron en paralelo antes de llamar aquí.
+     *
+     * dresscodeApplies=false cuando el usuario no seleccionó dress code;
+     * el peso del componente se redistribuye entre color, taste y trend.
      */
     ScoreEngineResponse scoreFromComponents(
             ColorScoreResponse precomputedColor,
             double dresscodeScore,
+            boolean dresscodeApplies,
             double tasteScore,
             TrendScoreResponse precomputedTrend
     );

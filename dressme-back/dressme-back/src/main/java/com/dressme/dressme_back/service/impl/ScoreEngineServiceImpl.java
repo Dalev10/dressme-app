@@ -93,6 +93,7 @@ public class ScoreEngineServiceImpl implements ScoreEngineService {
     public ScoreEngineResponse scoreFromComponents(
             ColorScoreResponse precomputedColor,
             double dresscodeScore,
+            boolean dresscodeApplies,
             double tasteScore,
             TrendScoreResponse precomputedTrend) {
 
@@ -112,14 +113,25 @@ public class ScoreEngineServiceImpl implements ScoreEngineService {
             trendWeight     += redistributed;
         }
 
+        if (!dresscodeApplies) {
+            int activeComponents = (colorApplies ? 1 : 0) + 1 + (trendApplies ? 1 : 0);
+            if (activeComponents > 0) {
+                double redistributed = dresscodeWeight / activeComponents;
+                dresscodeWeight = 0.0;
+                if (colorApplies) colorWeight += redistributed;
+                tasteWeight += redistributed;
+                if (trendApplies) trendWeight += redistributed;
+            }
+        }
+
         if (!trendApplies) {
-            int activeComponents = (colorApplies ? 1 : 0) + 2;
+            int activeComponents = (colorApplies ? 1 : 0) + (dresscodeApplies ? 1 : 0) + 1;
             if (activeComponents > 0) {
                 double redistributedTrend = trendWeight / activeComponents;
                 trendWeight = 0.0;
                 if (colorApplies) colorWeight += redistributedTrend;
-                dresscodeWeight += redistributedTrend;
-                tasteWeight     += redistributedTrend;
+                if (dresscodeApplies) dresscodeWeight += redistributedTrend;
+                tasteWeight += redistributedTrend;
             }
         }
 

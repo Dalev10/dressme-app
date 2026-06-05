@@ -135,17 +135,24 @@ public class OutfitOrchestratorServiceImpl implements OutfitOrchestratorService 
                 .collect(Collectors.toMap(TasteSimilarityResponse::outfitId,
                         TasteSimilarityResponse::similarity));
 
-        // ── Paso 9: totalScore local con ScoreEngine (sin HTTP) ───────────────
+        // ── Paso 9: totalScore con ScoreEngine + persistir scores ────────────
+        boolean dresscodeApplies = (request.dressCodeId() != null);
         record ScoredEntry(UUID outfitId, double totalScore) {}
         List<ScoredEntry> scored = new ArrayList<>();
 
         for (int i = 0; i < candidates.size(); i++) {
-            UUID outfitId  = persistedIds.get(i);
-            double taste   = tasteByOutfitId.getOrDefault(outfitId, 0.0);
+            UUID   outfitId  = persistedIds.get(i);
+            double taste     = tasteByOutfitId.getOrDefault(outfitId, 0.0);
             double dresscode = candidates.get(i).dresscodeScore();
 
             ScoreEngineResponse engineResult = scoreEngineService.scoreFromComponents(
-                    colorScores.get(i), dresscode, taste, trendScores.get(i));
+                    colorScores.get(i), dresscode, dresscodeApplies, taste, trendScores.get(i));
+
+            // Persistir scores ahora que los tenemos calculados
+            outfitClient.updateOutfitScores(outfitId, new OutfitScoreUpdateRequest(
+                    BigDecimal.valueOf(taste).setScale(4, java.math.RoundingMode.HALF_UP),
+                    engineResult.totalScore()
+            ));
 
             scored.add(new ScoredEntry(outfitId, engineResult.totalScore()));
         }

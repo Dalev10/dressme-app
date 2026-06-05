@@ -75,6 +75,18 @@ public class InternalOutfitController {
         return ResponseEntity.ok(outfitService.rateOutfit(outfitId, userId, request));
     }
 
+    // ── Scores ────────────────────────────────────────────────────────────────
+
+    @PatchMapping("/{outfitId}/scores")
+    public ResponseEntity<Void> updateScores(
+            @PathVariable UUID outfitId,
+            @Valid @RequestBody OutfitScoreUpdateRequest request) {
+        log.info("DB-Outfit: PATCH /{}/scores — affinity={} total={}",
+                outfitId, request.affinityScore(), request.totalScore());
+        outfitService.updateScores(outfitId, request);
+        return ResponseEntity.noContent().build(); // 204
+    }
+
     // ── Eliminar ──────────────────────────────────────────────────────────────
 
     @DeleteMapping("/{outfitId}")

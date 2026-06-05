@@ -12,7 +12,13 @@ public interface OutfitService {
     OutfitResponse createOutfit(OutfitCreateRequest request);
 
     /**
-     * Lista de outfits del usuario ordenados por affinityScore descendente.
+     * Actualiza affinityScore y totalScore en el audit tras el ScoreEngine.
+     * Llamado por dressme-back en el paso de scoring post-persistencia.
+     */
+    void updateScores(UUID outfitId, OutfitScoreUpdateRequest request);
+
+    /**
+     * Lista de outfits del usuario ordenados por totalScore descendente.
      */
     List<OutfitResponse> getOutfitsByUser(UUID userId);
 
