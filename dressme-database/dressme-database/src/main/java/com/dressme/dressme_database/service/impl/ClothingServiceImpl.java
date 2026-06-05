@@ -24,14 +24,16 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ClothingServiceImpl implements ClothingService {
 
-    private final ClothingRepository         clothingRepository;
-    private final ClothingAiAuditRepository  auditRepository;
-    private final ClothingCategoryRepository categoryRepository;
-    private final StyleRepository            styleRepository;
-    private final ColorRepository            colorRepository;
-    private final OccasionRepository         occasionRepository;
-    private final WeatherRepository          weatherRepository;
-    private final UserRepository             userRepository;
+    private final ClothingRepository          clothingRepository;
+    private final ClothingAiAuditRepository   auditRepository;
+    private final ClothingCategoryRepository  categoryRepository;
+    private final StyleRepository             styleRepository;
+    private final ColorRepository             colorRepository;
+    private final OccasionRepository          occasionRepository;
+    private final WeatherRepository           weatherRepository;
+    private final UserRepository              userRepository;
+    private final ClothingOccasionRepository  clothingOccasionRepository;
+    private final ClothingWeatherRepository   clothingWeatherRepository;
 
     // ── Paso 1: Registro inicial ──────────────────────────────────────────────
 
@@ -95,13 +97,41 @@ public class ClothingServiceImpl implements ClothingService {
         audit.setDetectedSaturation(request.detectedSaturation());
         audit.setDetectedLightness(request.detectedLightness());
 
-        weatherRepository.findById(request.predictedWeatherId())
-                .ifPresent(audit::setPredictedWeather);
-        occasionRepository.findById(request.predictedOccasionId())
-                .ifPresent(audit::setPredictedOccasion);
+        // Primary weather/occasion on the audit (first of the list — used by embedding step)
+        if (request.predictedWeatherIds() != null && !request.predictedWeatherIds().isEmpty()) {
+            weatherRepository.findById(request.predictedWeatherIds().get(0))
+                    .ifPresent(audit::setPredictedWeather);
+        }
+        if (request.predictedOccasionIds() != null && !request.predictedOccasionIds().isEmpty()) {
+            occasionRepository.findById(request.predictedOccasionIds().get(0))
+                    .ifPresent(audit::setPredictedOccasion);
+        }
 
         auditRepository.save(audit);
-        log.info("ClothingService: Audit aplicado — prenda {} procesada", clothing.getId());
+
+        // Populate M:N join tables — delete previous entries then insert all predicted values
+        clothingOccasionRepository.deleteByClothingId(clothing.getId());
+        for (UUID occasionId : request.predictedOccasionIds()) {
+            occasionRepository.findById(occasionId).ifPresent(occasion ->
+                clothingOccasionRepository.save(
+                    ClothingOccasion.builder().clothing(clothing).occasion(occasion).build()
+                )
+            );
+        }
+
+        clothingWeatherRepository.deleteByClothingId(clothing.getId());
+        for (UUID weatherId : request.predictedWeatherIds()) {
+            weatherRepository.findById(weatherId).ifPresent(weather ->
+                clothingWeatherRepository.save(
+                    ClothingWeather.builder().clothing(clothing).weather(weather).build()
+                )
+            );
+        }
+
+        log.info("ClothingService: Audit aplicado — prenda {} procesada ({} ocasiones, {} climas)",
+                clothing.getId(),
+                request.predictedOccasionIds().size(),
+                request.predictedWeatherIds().size());
         return toSummary(clothing);
     }
 

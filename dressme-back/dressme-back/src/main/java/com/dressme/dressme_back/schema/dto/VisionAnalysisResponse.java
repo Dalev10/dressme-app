@@ -13,6 +13,7 @@
 package com.dressme.dressme_back.schema.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public record VisionAnalysisResponse(
@@ -38,11 +39,11 @@ public record VisionAnalysisResponse(
     /** Lightness detectado por Gemini Vision [0-100] */
     Integer detectedLightness,
 
-    /** Clima predicho por Gemini */
-    UUID predictedWeatherId,
+    /** Climas predichos por Gemini (uno o más) */
+    List<UUID> predictedWeatherIds,
 
-    /** Ocasión predicha por Gemini */
-    UUID predictedOccasionId,
+    /** Ocasiones predichas por Gemini (una o más) */
+    List<UUID> predictedOccasionIds,
 
     /**
      * Confianza del modelo entre 0.00 y 1.00.
