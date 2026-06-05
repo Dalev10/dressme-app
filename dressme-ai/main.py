@@ -88,7 +88,7 @@ logger.info(
 )
 
 
-@app.get("/", tags=["Health"])
+@app.api_route("/", methods=["GET", "HEAD"], tags=["Health"])
 def health_check():
     return {
         "service": settings.app_name,
