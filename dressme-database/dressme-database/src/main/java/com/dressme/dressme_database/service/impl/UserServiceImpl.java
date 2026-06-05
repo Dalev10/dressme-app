@@ -18,8 +18,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.StringJoiner;
 
 @Service
 @RequiredArgsConstructor
@@ -34,12 +36,12 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserProfileResponse createUserFromOAuth(InternalUserCreateRequest request) {
-        
-        // 1. Buscar la entidad Provider maestra en la base de datos
-        Provider providerEntity = providerRepository.findByName(request.provider().toUpperCase())
-                .orElseThrow(() -> new RuntimeException("Proveedor no soportado o no encontrado: " + request.provider()));
 
-        // 2. Validar si la identidad ya existe (Flujo de Login vs Registro)
+        Provider providerEntity = providerRepository.findByName(request.provider().toUpperCase())
+                .orElseThrow(() -> new RuntimeException(
+                        "Proveedor no soportado o no encontrado: " + request.provider()
+                ));
+
         Optional<UserIdentity> existingIdentity = userIdentityRepository
                 .findByProviderAndProviderUserId(providerEntity, request.providerId());
 
@@ -47,100 +49,152 @@ public class UserServiceImpl implements UserService {
             return mapToResponse(existingIdentity.get().getUser());
         }
 
-        // 3. Crear y persistir el Usuario base
         User newUser = User.builder()
                 .email(request.email())
                 .displayName(request.displayName())
                 .profilePicture(request.profilePictureUrl())
                 .build();
+
         newUser = userRepository.save(newUser);
 
-        // 4. Crear y persistir el vínculo de Identidad
         UserIdentity identity = UserIdentity.builder()
                 .user(newUser)
                 .provider(providerEntity)
                 .providerUserId(request.providerId())
                 .build();
+
         userIdentityRepository.save(identity);
 
-        // 5. Crear y persistir el perfil IA con el vector inicial
         UserTasteProfile tasteProfile = UserTasteProfile.builder()
                 .user(newUser)
                 .tasteVector(request.initialTasteVector())
+                .sourceType("COLD_START")
+                .isCalibrated(false)
                 .build();
+
         userTasteProfileRepository.save(tasteProfile);
 
-        // 6. Retornar el DTO limpio
         return mapToResponse(newUser);
     }
 
-    // Método auxiliar privado para centralizar el mapeo de la respuesta
-    private UserProfileResponse mapToResponse(User user) {
+        private UserProfileResponse mapToResponse(User user) {
+                boolean calibrated = userTasteProfileRepository.findByUserId(user.getId())
+                        .map(UserTasteProfile::isCalibrated)
+                        .orElse(false);
+
         return new UserProfileResponse(
-                user.getId(),
-                user.getEmail(),
-                user.getDisplayName(),
-                user.getProfilePicture(),
-                false // isCalibrated por defecto en false durante el registro (Cold Start)
-        );
-    }
+                    user.getId(),
+                    user.getEmail(),
+            user.getDisplayName(),
+            user.getProfilePicture(),
+            calibrated 
+                );
+        }
 
     @Override
     public UserResponseDTO getUserProfile(UUID userId) {
-        // 1. Buscamos al usuario base. Si no existe, lanzamos error 404
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + userId));
+                .orElseThrow(() -> new RuntimeException(
+                        "Usuario no encontrado con ID: " + userId
+                ));
 
-        // 2. Buscamos su estado de calibración en la otra tabla
+        float[] tasteVector = userTasteProfileRepository.findByUserId(userId)
+                .map(UserTasteProfile::getTasteVector)
+                .orElse(null);
+
         boolean calibrated = userTasteProfileRepository.findByUserId(userId)
                 .map(UserTasteProfile::isCalibrated)
                 .orElse(false);
 
-        // 3. Construimos el DTO de salida
         return UserResponseDTO.builder()
                 .id(user.getId())
                 .email(user.getEmail())
                 .displayName(user.getDisplayName())
                 .profilePicture(user.getProfilePicture())
+                .tasteVector(tasteVector)
                 .isCalibrated(calibrated)
                 .build();
     }
 
     @Override
-    @Transactional // CRUCIAL: Garantiza que se actualicen ambas tablas o ninguna
+    @Transactional
     public UserResponseDTO updateUserProfile(UUID userId, UserUpdateRequest request) {
-        log.info("Database Service: Iniciando actualización para usuario ID: {}", userId);
+        log.info(
+                "Database Service: updateUserProfile recibido. userId={}, displayName={}, profilePicture={}, isCalibrated={}, tasteVectorLength={}, sourceType={}",
+                userId,
+                request.getDisplayName(),
+                request.getProfilePicture(),
+                request.getIsCalibrated(),
+                request.getTasteVector() != null ? request.getTasteVector().length : null,
+                request.getSourceType()
+        );
 
-        // 1. Buscar y actualizar Entidad User (tbl_users)
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + userId));
 
-        if (request.getDisplayName() != null) {
+        if (request.getDisplayName() != null && !request.getDisplayName().isBlank()) {
             user.setDisplayName(request.getDisplayName());
         }
-        if (request.getProfilePicture() != null) {
+
+        if (request.getProfilePicture() != null && !request.getProfilePicture().isBlank()) {
             user.setProfilePicture(request.getProfilePicture());
         }
+
         userRepository.save(user);
 
-        // 2. Buscar y actualizar Entidad UserTasteProfile (tbl_user_taste_profile)
-        userTasteProfileRepository.findByUserId(userId).ifPresent(profile -> {
-            if (request.getIsCalibrated() != null) {
-                profile.setCalibrated(request.getIsCalibrated());
-            }
-            if (request.getTasteVector() != null) {
-                profile.setTasteVector(request.getTasteVector());
-            }
-            profile.setLastUpdated(java.time.LocalDateTime.now());
-            userTasteProfileRepository.save(profile);
-        });
+        UserTasteProfile profile = userTasteProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException(
+                        "Perfil IA no encontrado para usuario con ID: " + userId
+                ));
 
-        // 3. Reutilizamos el método GET funcional para retornar el estado final íntegro
-        return getUserProfile(userId);
+        log.info(
+                "Database Service: Perfil antes de aplicar cambios. isCalibrated={}, sourceType={}, tasteVectorLength={}",
+                profile.isCalibrated(),
+                profile.getSourceType(),
+                profile.getTasteVector() != null ? profile.getTasteVector().length : null
+        );
+
+        // Determinar nuevos valores (o mantener los actuales si no vienen en el request)
+        boolean newCalibrated = request.getIsCalibrated() != null
+                ? request.getIsCalibrated()
+                : profile.isCalibrated();
+
+        float[] newVector = (request.getTasteVector() != null && request.getTasteVector().length > 0)
+                ? request.getTasteVector()
+                : profile.getTasteVector();
+
+        String newSourceType = (request.getSourceType() != null && !request.getSourceType().isBlank())
+                ? request.getSourceType().trim().toUpperCase()
+                : profile.getSourceType();
+
+        // Convertir el vector float[] a la representación de pgvector: [v1,v2,...]
+        String vectorParam = null;
+        if (newVector != null) {
+            StringJoiner sj = new StringJoiner(",", "[", "]");
+            for (float f : newVector) {
+                sj.add(Float.toString(f));
+            }
+            vectorParam = sj.toString();
+        }
+
+        // Forzar UPDATE nativo para evitar problemas de binding/detection con Hibernate
+        userTasteProfileRepository.updateTasteProfile(
+                userId, vectorParam, newCalibrated, newSourceType, LocalDateTime.now()
+        );
+
+        UserResponseDTO response = getUserProfile(userId);
+
+        log.info(
+                "Database Service: Perfil después de guardar. isCalibrated={}, sourceType={}",
+                response.isCalibrated(),
+                profile.getSourceType()
+        );
+
+        return response;
     }
 
     @Override
-    @Transactional // CRÍTICO: Todo el borrado ocurre en una sola unidad de trabajo
+    @Transactional
     public void deleteUser(UUID userId) {
         log.info("Database Service: Iniciando ELIMINACIÓN TOTAL para ID: {}", userId);
 
@@ -148,17 +202,14 @@ public class UserServiceImpl implements UserService {
             throw new RuntimeException("Usuario no encontrado");
         }
 
-        // 1. Borrar Perfil de Gustos (Hijo)
         userTasteProfileRepository.findByUserId(userId).ifPresent(profile -> {
             userTasteProfileRepository.delete(profile);
             log.info("1/3: Perfil de gusto eliminado.");
         });
 
-        // 2. Borrar Identidades de Auth (Hijo) - SOLUCIONA EL ERROR SQL
         userIdentityRepository.deleteByUserId(userId);
         log.info("2/3: Identidades externas (Google) eliminadas.");
 
-        // 3. Borrar el Usuario (Padre)
         userRepository.deleteById(userId);
         log.info("3/3: Registro maestro tbl_users eliminado. Proceso completo.");
     }

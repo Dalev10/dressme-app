@@ -1,11 +1,12 @@
-# Usamos una imagen base ligera de Eclipse Temurin para Java 21
-FROM eclipse-temurin:21-jdk-alpine
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline -q
+COPY src ./src
+RUN mvn package -DskipTests -q
+
+FROM eclipse-temurin:21-jre-alpine
 VOLUME /tmp
-# Argumento para apuntar al .jar generado por Maven
-ARG JAR_FILE=target/*.jar
-# Copiamos el .jar al contenedor
-COPY ${JAR_FILE} app.jar
-# Exponemos el puerto interno
+COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
-# Comando para ejecutar la aplicación
-ENTRYPOINT ["java","-jar","/app.jar"]
+ENTRYPOINT ["java", "-jar", "/app.jar"]

@@ -20,10 +20,16 @@ public class Color {
     @Column(unique = true, nullable = false, length = 50)
     private String name;
 
-    @Column(name = "hex_code", unique = true, nullable = false, length = 7)
-    private String hexCode; // Ejemplo: #FF5733
+    @Column(nullable = false)
+    private Integer hue;
+
+    @Column(nullable = false)
+    private Integer saturation;
+
+    @Column(nullable = false)
+    private Integer lightness;
 
     @Builder.Default
     @Column(name = "is_neutral")
-    private boolean isNeutral = false;
+    private boolean neutral = false;
 }

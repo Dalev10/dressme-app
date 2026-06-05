@@ -1,0 +1,282 @@
+"""
+schemas/outfit.py
+──────────────────
+Contratos de datos del flujo de generación de outfits.
+
+Todos los modelos usan CamelModel (heredado de schemas/wardrobe.py) para
+garantizar interop camelCase ↔ snake_case con los microservicios Java.
+
+Jerarquía de modelos:
+  Entrada al flujo:
+    ClothingEmbeddingRequest          → una prenda a vectorizar
+    OutfitGenerationRequest           → guardarropa completo + filtros del usuario
+    OutfitGenerationOrchestratedRequest → contrato del endpoint orquestado que
+                                          consume dressme-back
+
+  Salida del flujo:
+    ClothingEmbeddingResponse         → prenda con su embedding generado
+    CandidateSlot                     → una prenda asignada a un slot del outfit
+    OutfitCandidate                   → combinación cruda producida por el generador
+                                        (sin scores de componentes)
+    ScoredOutfitCandidate             → candidato enriquecido con todos los scores
+                                        calculados en dressme-ai (dresscode_score)
+                                        y listos para que dressme-back complete
+                                        color, taste y trend antes de persistir
+    OutfitGenerationResponse          → N candidatos del generador puro
+    OutfitGenerationOrchestratedResponse → N ScoredOutfitCandidate devueltos al
+                                           orquestador en dressme-back
+"""
+
+from uuid import UUID
+from pydantic import Field, field_validator
+from schemas.wardrobe import CamelModel
+
+
+# ── Embedding de una prenda ───────────────────────────────────────────────────
+
+class ClothingEmbeddingRequest(CamelModel):
+    """
+    Payload para vectorizar una prenda individual.
+
+    El texto semántico que se embede se construye en EmbeddingClothingService
+    combinando estos campos:
+        "{category} {style} {color} para {weather} y {occasion}"
+
+    clothing_id  → se reenvía en la respuesta para que dressme-back pueda
+                   hacer el PATCH correcto en dressme-database.
+    """
+    clothing_id: UUID
+    category:   str = Field(..., min_length=1, description="Nombre de la categoría (ej: T-Shirt)")
+    style:      str = Field(..., min_length=1, description="Nombre del estilo (ej: Casual, Boho-Chic)")
+    color:      str = Field(..., min_length=1, description="Nombre del color del catálogo (ej: Navy Blue)")
+    weather:    str = Field(..., min_length=1, description="Condición climática (ej: Cold, Warm)")
+    occasion:   str = Field(..., min_length=1, description="Ocasión (ej: Casual, Formal, Sport)")
+
+
+class ClothingEmbeddingResponse(CamelModel):
+    """
+    Respuesta de la vectorización de una prenda.
+    dressme-back la persiste via PATCH /internal/wardrobe/{clothingId}/embedding.
+    """
+    clothing_id:      UUID
+    embedding_vector: list[float] = Field(..., min_length=1536, max_length=1536)
+
+    @field_validator("embedding_vector")
+    @classmethod
+    def must_be_1536_dims(cls, v: list[float]) -> list[float]:
+        if len(v) != 1536:
+            raise ValueError(
+                f"El embedding debe tener exactamente 1536 dimensiones, recibió {len(v)}"
+            )
+        return v
+
+
+# ── Candidatos de outfit ──────────────────────────────────────────────────────
+
+class ClothingEmbeddingInfo(CamelModel):
+    """
+    Prenda del guardarropa con su embedding ya resuelto.
+    Es el elemento base que dressme-back envía en OutfitGenerationRequest.
+
+    embedding_vector  → null si la prenda aún no fue vectorizada.
+                        El generador ignorará estas prendas con un warning.
+    slot              → categoría mapeada al slot lógico del outfit
+                        (TOP, BOTTOM, OUTERWEAR, FOOTWEAR, ONEPIECE).
+                        Lo resuelve dressme-back antes de llamar a este endpoint.
+    hue / saturation / lightness → valores HSL del audit IA, necesarios para
+                        que el ColorScoreService evalúe armonía cromática.
+    """
+    clothing_id:      UUID
+    slot:             str = Field(..., description="TOP | BOTTOM | OUTERWEAR | FOOTWEAR | ONEPIECE")
+    embedding_vector: list[float] | None = Field(
+        default=None,
+        description="Vector 1536-dims. None si aún no fue vectorizada."
+    )
+    hue:        int = Field(..., ge=0, le=360)
+    saturation: int = Field(..., ge=0, le=100)
+    lightness:  int = Field(..., ge=0, le=100)
+
+    @field_validator("slot")
+    @classmethod
+    def slot_must_be_valid(cls, v: str) -> str:
+        valid = {"TOP", "BOTTOM", "OUTERWEAR", "FOOTWEAR", "ONEPIECE"}
+        if v.upper() not in valid:
+            raise ValueError(f"slot debe ser uno de {valid}, recibió '{v}'")
+        return v.upper()
+
+
+class CandidateSlot(CamelModel):
+    """Una prenda asignada a un slot específico dentro de un outfit candidato."""
+    slot:        str  # TOP | BOTTOM | OUTERWEAR | FOOTWEAR | ONEPIECE
+    clothing_id: UUID
+    hue:        int
+    saturation: int
+    lightness:  int
+
+
+class OutfitCandidate(CamelModel):
+    """
+    Una combinación completa de prendas producida por OutfitGeneratorService.
+
+    slots         → las prendas seleccionadas por slot.
+    outfit_vector → promedio de los embedding_vectors de todas las prendas
+                    del outfit (1536 dims). dressme-back lo usa para:
+                      - TasteScore: similitud coseno con taste_vector del usuario.
+                      - DressCode score: similitud coseno con dressCode embedding.
+                      - Persistencia en tbl_outfit_ai_audit.outfit_vector.
+
+    dresscode_score → score de similitud coseno entre outfit_vector y el
+                      dresscode_embedding del request (calculado por
+                      DresscodeSimilarityService en el router orquestado).
+                      Valor 0.0 por defecto cuando aún no fue calculado
+                      (candidatos crudos devueltos por OutfitGeneratorService).
+
+    NOTA: este modelo es la salida de OutfitGeneratorService.generate().
+    Para el contrato de respuesta del endpoint orquestado, ver ScoredOutfitCandidate.
+    """
+    slots:          list[CandidateSlot]
+    outfit_vector:  list[float] = Field(..., min_length=1536, max_length=1536)
+    dresscode_score: float = Field(
+        default=0.0,
+        description=(
+            "Score de similitud coseno con el dresscode_embedding. "
+            "0.0 si el dress code no fue especificado (applies=False) "
+            "o si el candidato aún no fue enriquecido por el router orquestado."
+        ),
+    )
+
+
+class ScoredOutfitCandidate(CamelModel):
+    """
+    Candidato de outfit enriquecido con todos los scores disponibles
+    tras pasar por el router orquestado POST /internal/ai/outfit/generate.
+
+    Contrato que dressme-back consume para completar el scoring final
+    (color_score via ColorScoreService, taste_score via TasteSimilarityService,
+    trend_score via TrendScoreService) y persistir el outfit.
+
+    Campos calculados en dressme-ai:
+      - dresscode_score: similitud coseno outfit_vector ↔ dresscode_embedding.
+
+    Campos que dressme-back completa antes de persistir:
+      - color_score:    armonía cromática entre las prendas del outfit.
+      - taste_score:    similitud coseno outfit_vector ↔ taste_vector del usuario.
+      - trend_score:    similitud coseno outfit_vector ↔ avg_vector del dataset.
+      - total_score:    composición ponderada final del ScoreEngine.
+
+    Los campos de scoring pendientes se inicializan en 0.0 para que el
+    schema sea válido al serializar. dressme-back los sobreescribe.
+    """
+    slots:           list[CandidateSlot]
+    outfit_vector:   list[float] = Field(..., min_length=1536, max_length=1536)
+    color_score:     float = Field(default=0.0, description="Calculado por dressme-back (ColorScoreService).")
+    dresscode_score: float = Field(default=0.0, description="Calculado por dressme-ai (DresscodeSimilarityService).")
+    taste_score:     float = Field(default=0.0, description="Calculado por dressme-back (TasteSimilarityService).")
+    trend_score:     float = Field(default=0.0, description="Calculado por dressme-back (TrendScoreService).")
+    total_score:     float = Field(default=0.0, description="Score compuesto final del ScoreEngine en dressme-back.")
+
+
+# ── Request / Response del endpoint principal ─────────────────────────────────
+
+class OutfitGenerationRequest(CamelModel):
+    """
+    Payload que recibe POST /ai/outfit/generate desde dressme-back.
+
+    user_id     → para logs y trazabilidad.
+    occasion    → nombre de la ocasión filtrada por el usuario (ej: "Casual").
+    weather     → nombre del clima filtrado por el usuario (ej: "Cold").
+    dress_code  → nombre del dress code opcional (ej: "Smart Casual"). None si no aplica.
+    wardrobe    → prendas del usuario ya vectorizadas, enriquecidas con slot y HSL.
+                  Solo se incluyen las procesadas (is_processed=true) y
+                  con embedding_vector != null.
+    """
+    user_id:    UUID
+    occasion:   str = Field(..., min_length=1)
+    weather:    str = Field(..., min_length=1)
+    dress_code: str | None = Field(default=None)
+    wardrobe:   list[ClothingEmbeddingInfo] = Field(
+        ...,
+        min_length=1,
+        description="Prendas del guardarropa con embedding y slot resueltos."
+    )
+
+
+class OutfitGenerationResponse(CamelModel):
+    """
+    Respuesta de POST /ai/outfit/generate.
+
+    candidates       → lista de outfits candidatos listos para scoring.
+    total_candidates → número de combinaciones generadas (puede diferir de
+                       len(candidates) si se aplicó un límite de N).
+    skipped_clothing → número de prendas ignoradas por falta de embedding o slot inválido.
+    """
+    candidates:       list[OutfitCandidate]
+    total_candidates: int
+    skipped_clothing: int = Field(default=0)
+
+
+# ── Request / Response del endpoint orquestado ────────────────────────────────
+
+class OutfitGenerationOrchestratedRequest(CamelModel):
+    """
+    Payload que recibe POST /internal/ai/outfit/generate (endpoint orquestado).
+
+    Este es el contrato de entrada del flujo completo que dressme-back consume.
+    Extiende OutfitGenerationRequest con dresscode_embedding, que permite a
+    DresscodeSimilarityService calcular el score de dress code directamente
+    en dressme-ai sin necesitar una llamada adicional de vuelta al back.
+
+    dresscode_embedding → vector del dress code seleccionado por el usuario
+                          (obtenido por dressme-back desde dressme-database
+                          antes de llamar a este endpoint).
+                          None cuando el usuario no seleccionó dress code;
+                          en ese caso applies=False y el ScoreEngine en Java
+                          redistribuye el peso del componente dresscode.
+
+    Invariante: si dresscode_embedding no es None, debe tener exactamente
+    1536 dimensiones para ser comparable con outfit_vector en el mismo espacio.
+    """
+    user_id:             UUID
+    occasion:            str = Field(..., min_length=1)
+    weather:             str = Field(..., min_length=1)
+    wardrobe:            list[ClothingEmbeddingInfo] = Field(
+        ...,
+        min_length=1,
+        description="Prendas pre-filtradas por dressme-back (procesadas, con embedding, con ocasión/clima).",
+    )
+    dresscode_embedding: list[float] | None = Field(
+        default=None,
+        description=(
+            "Vector del dress code seleccionado (1536 dims). "
+            "None si el usuario no especificó dress code — "
+            "el ScoreEngine en dressme-back redistribuirá el peso."
+        ),
+    )
+
+    @field_validator("dresscode_embedding")
+    @classmethod
+    def dresscode_embedding_must_be_1536_or_none(
+        cls, v: list[float] | None
+    ) -> list[float] | None:
+        if v is not None and len(v) != 1536:
+            raise ValueError(
+                f"dresscode_embedding debe tener exactamente 1536 dimensiones, recibió {len(v)}"
+            )
+        return v
+
+
+class OutfitGenerationOrchestratedResponse(CamelModel):
+    """
+    Respuesta de POST /internal/ai/outfit/generate (endpoint orquestado).
+
+    Lista de candidatos enriquecidos con dresscode_score ya calculado.
+    dressme-back itera sobre esta lista para completar color_score, taste_score
+    y trend_score, calcular total_score con el ScoreEngine y persistir cada outfit.
+
+    total_candidates → número de combinaciones generadas antes del límite MAX_CANDIDATES.
+                       Útil para logs y métricas de cobertura del guardarropa.
+    skipped_clothing → prendas ignoradas por falta de embedding o slot inválido.
+    """
+    candidates:       list[ScoredOutfitCandidate]
+    total_candidates: int
+    skipped_clothing: int = Field(default=0)

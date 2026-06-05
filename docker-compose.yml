@@ -8,21 +8,22 @@ services:
     restart: always
     ports:
       - "5434:5432"
-    environment:
-      POSTGRES_DB: dressmedb
-      POSTGRES_USER: user_admin
-      POSTGRES_PASSWORD: password123
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
     networks:
       - dressme-network
 
   # 2. Microservicio de Base de Datos
   dressme-database:
-    build: 
+    build:
       context: ./dressme-database/dressme-database
-      dockerfile: Dockerfile # <-- Apunta explícitamente al local
+      dockerfile: Dockerfile
     container_name: dressme-database
+    env_file:
+      - .env
     ports:
       - "8082:8080"
     depends_on:
@@ -32,27 +33,54 @@ services:
 
   # 3. Microservicio Cerebro / Orquestador
   dressme-back:
-    build: 
+    build:
       context: ./dressme-back/dressme-back
-      dockerfile: Dockerfile # <-- Apunta explícitamente al local
+      dockerfile: Dockerfile
     container_name: dressme-back
+    env_file:
+      - .env
+    environment:
+      - APP_SERVICES_AI_URL=http://dressme-ai:8000
+      - APP_SERVICES_DATABASE_URL=http://dressme-database:8080 # <-- NUEVA LÍNEA
     ports:
       - "8081:8080"
     depends_on:
       - dressme-database
+    volumes:
+      - ./wardrobe-images:/app/images
     networks:
       - dressme-network
-
+      
   # 4. Microservicio Gateway (Público)
   dressme-gateway:
-    build: 
+    build:
       context: ./dressme-gateway/dressme-gateway
-      dockerfile: Dockerfile # <-- Apunta explícitamente al local
+      dockerfile: Dockerfile
     container_name: dressme-gateway
+    env_file:
+      - .env
     ports:
       - "8080:8080"
     depends_on:
       - dressme-back
+    networks:
+      - dressme-network
+
+  # 5. Microservicio de Inteligencia Artificial
+  dressme-ai:
+    build:
+      context: ./dressme-ai
+      dockerfile: Dockerfile
+    container_name: dressme-ai
+    env_file:
+      - .env
+    environment:
+      - AI_SERVICE_URL=http://dressme-ai:8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - dressme-db
+      - dressme-database
     networks:
       - dressme-network
 
@@ -62,3 +90,4 @@ networks:
 
 volumes:
   postgres_data:
+  wardrobe_images:
