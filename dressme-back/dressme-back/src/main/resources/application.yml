@@ -57,6 +57,10 @@ app:
   feign:
     ai-service-url: 'http://dressme-ai:8000'
 
+  services:
+    database-url: ${DATABASE_SERVICE_URL:http://dressme-database:8080}
+    ai-url: ${AI_SERVICE_URL:http://dressme-ai:8000}
+
   outfit-generation:
     top-n: 5
 
@@ -110,6 +114,3 @@ spring:
 app:
   security:
     jwt-secret: ${JWT_SECRET}
-  services:
-    database-url: ${DATABASE_SERVICE_URL}
-    ai-url: ${AI_SERVICE_URL}
