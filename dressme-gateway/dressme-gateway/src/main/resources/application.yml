@@ -6,6 +6,10 @@ spring:
     name: dressme-gateway
   main:
     allow-bean-definition-overriding: true
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 8MB
 
 # ── URLs de microservicios internos ───────────────────────────────────────────
 app:

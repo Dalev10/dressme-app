@@ -5,6 +5,10 @@
 spring:
   application:
     name: dressme-back
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 8MB
 
   datasource:
     # CORREGIDO: El nombre del host es 'dressme-db' y la DB es 'dressmedb' (según tu docker-compose y .env)
@@ -46,9 +50,10 @@ spring:
 # CONFIGURACIÓN PERSONALIZADA DE DRESSME
 # ═══════════════════════════════════════════════════════════════════════════════════
 
-storage:
-  path: /app/images
-  base-url: ${STORAGE_BASE_URL:http://dressme-back:8080/images}
+supabase:
+  url: ${SUPABASE_URL}
+  service-key: ${SUPABASE_SERVICE_KEY}
+  bucket: ${SUPABASE_BUCKET:wardrobe-images}
 
 app:
   security:
