@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.concurrent.TimeUnit;
+
 @Configuration
 @Slf4j
 public class FeignConfig {
@@ -13,6 +15,11 @@ public class FeignConfig {
     @Bean
     public Client feignClient() {
         log.info("FeignConfig: Initializing Feign OkHttpClient (supports PATCH method)");
-        return new OkHttpClient(new okhttp3.OkHttpClient());
+        okhttp3.OkHttpClient httpClient = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(70, TimeUnit.SECONDS)
+                .readTimeout(70, TimeUnit.SECONDS)
+                .writeTimeout(70, TimeUnit.SECONDS)
+                .build();
+        return new OkHttpClient(httpClient);
     }
 }
