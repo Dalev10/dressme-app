@@ -20,14 +20,14 @@ public interface OutfitRepository extends JpaRepository<Outfit, UUID> {
     List<Outfit> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
     /**
-     * Top outfits de un usuario ordenados por affinityScore descendente.
-     * Usa el audit para ordenar — los mejor rankeados por el motor aparecen primero.
+     * Outfits de un usuario ordenados por totalScore descendente.
+     * NULLS LAST garantiza que outfits legacy (sin totalScore) queden al final.
      */
     @Query("""
         SELECT o FROM Outfit o
         JOIN OutfitAiAudit a ON a.outfit.id = o.id
         WHERE o.user.id = :userId
-        ORDER BY a.affinityScore DESC
+        ORDER BY a.totalScore DESC NULLS LAST
         """)
     List<Outfit> findTopByUserIdOrderByAffinityScore(@Param("userId") UUID userId);
 

@@ -34,6 +34,9 @@ public record OutfitResponse(
     /** Afinidad con el taste_vector [0.00–1.00] */
     BigDecimal affinityScore,
 
+    /** Score total final calculado por el ScoreEngine — valor de ranking definitivo */
+    Double totalScore,
+
     /** Calificación del usuario [1–5] — null si aún no calificó */
     Integer rating,
 

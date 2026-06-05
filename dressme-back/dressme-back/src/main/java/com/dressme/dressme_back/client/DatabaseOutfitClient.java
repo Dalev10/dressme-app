@@ -4,6 +4,7 @@ import com.dressme.dressme_back.schema.dto.OutfitCreateRequest;
 import com.dressme.dressme_back.schema.dto.OutfitDetailResponse;
 import com.dressme.dressme_back.schema.dto.OutfitRatingRequest;
 import com.dressme.dressme_back.schema.dto.OutfitResponse;
+import com.dressme.dressme_back.schema.dto.OutfitScoreUpdateRequest;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,6 +52,13 @@ public interface DatabaseOutfitClient {
             @PathVariable("outfitId") UUID outfitId,
             @RequestParam("userId") UUID userId,
             @RequestBody OutfitRatingRequest request
+    );
+
+    /** Persiste affinityScore (tasteScore) y totalScore tras el ScoreEngine. */
+    @PatchMapping("/internal/outfits/{outfitId}/scores")
+    void updateOutfitScores(
+            @PathVariable("outfitId") UUID outfitId,
+            @RequestBody OutfitScoreUpdateRequest request
     );
 
     /** Elimina candidatos no seleccionados en el top-N tras la generación. */

@@ -128,6 +128,21 @@ public class OutfitServiceImpl implements OutfitService {
         return toSummary(savedOutfit, clothes, audit);
     }
 
+    // ── Actualizar scores ────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public void updateScores(UUID outfitId, OutfitScoreUpdateRequest request) {
+        OutfitAiAudit audit = auditRepository.findByOutfitId(outfitId)
+                .orElseThrow(() -> new RuntimeException(
+                        "OutfitAiAudit no encontrado para outfit: " + outfitId));
+        audit.setAffinityScore(request.affinityScore());
+        audit.setTotalScore(request.totalScore());
+        auditRepository.save(audit);
+        log.info("OutfitService: Scores actualizados — outfit={} affinity={} total={}",
+                outfitId, request.affinityScore(), request.totalScore());
+    }
+
     // ── Listar ───────────────────────────────────────────────────────────────
 
     @Override
@@ -262,6 +277,7 @@ public class OutfitServiceImpl implements OutfitService {
                 o.getWeather() != null ? o.getWeather().getName() : null,
                 audit != null ? audit.getMatchScore() : null,
                 audit != null ? audit.getAffinityScore() : null,
+                audit != null ? audit.getTotalScore() : null,
                 o.getRating(),
                 o.isAiProcessed(),
                 o.getCreatedAt()
