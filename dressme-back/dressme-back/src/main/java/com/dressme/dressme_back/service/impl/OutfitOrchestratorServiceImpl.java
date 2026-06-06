@@ -156,27 +156,26 @@ public class OutfitOrchestratorServiceImpl implements OutfitOrchestratorService 
                 Map<UUID, ClothingEmbeddingInfo> wardrobeMap = wardrobe.stream()
                                 .collect(Collectors.toMap(ClothingEmbeddingInfo::clothingId, c -> c));
 
-                // ── Paso 5: puntuar color y trend en paralelo para todos los candidatos ─
+                // ── Paso 5: puntuar color (paralelo) y trend (batch, 1 llamada) ──────
                 List<CompletableFuture<ColorScoreResponse>> colorFutures = candidates.stream()
                                 .map(c -> CompletableFuture.supplyAsync(
                                                 () -> colorScoreService.score(buildColorRequest(c, wardrobeMap))))
                                 .toList();
 
-                List<CompletableFuture<TrendScoreResponse>> trendFutures = candidates.stream()
-                                .map(c -> CompletableFuture.supplyAsync(
-                                                () -> trendScoreService
-                                                                .computeTrendScore(getEmbeddings(c, wardrobeMap))))
+                List<List<List<Float>>> allOutfitEmbeddings = candidates.stream()
+                                .map(c -> getEmbeddings(c, wardrobeMap))
                                 .toList();
 
+                CompletableFuture<List<TrendScoreResponse>> trendBatchFuture = CompletableFuture.supplyAsync(
+                                () -> trendScoreService.computeBatch(allOutfitEmbeddings).scores());
+
                 CompletableFuture.allOf(colorFutures.stream().toArray(CompletableFuture[]::new)).join();
-                CompletableFuture.allOf(trendFutures.stream().toArray(CompletableFuture[]::new)).join();
+                trendBatchFuture.join();
 
                 List<ColorScoreResponse> colorScores = colorFutures.stream()
                                 .map(CompletableFuture::join)
                                 .toList();
-                List<TrendScoreResponse> trendScores = trendFutures.stream()
-                                .map(CompletableFuture::join)
-                                .toList();
+                List<TrendScoreResponse> trendScores = trendBatchFuture.join();
 
                 // ── Paso 6: persistir todos los candidatos para obtener sus UUIDs ─────
                 List<UUID> persistedIds = new ArrayList<>();
