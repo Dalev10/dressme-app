@@ -1,6 +1,8 @@
 package com.dressme.dressme_back.service.impl;
 
 import com.dressme.dressme_back.client.AiTrendScoreClient;
+import com.dressme.dressme_back.schema.dto.TrendScoreBatchRequest;
+import com.dressme.dressme_back.schema.dto.TrendScoreBatchResponse;
 import com.dressme.dressme_back.schema.dto.TrendScoreRequest;
 import com.dressme.dressme_back.schema.dto.TrendScoreResponse;
 import com.dressme.dressme_back.service.TrendScoreService;
@@ -10,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +52,36 @@ public class TrendScoreServiceImpl implements TrendScoreService {
                 e.contentUTF8()
             );
             return new TrendScoreResponse(0.0, false, 0);
+        }
+    }
+
+    @Override
+    public TrendScoreBatchResponse computeBatch(List<List<List<Float>>> outfitsEmbeddings) {
+        if (outfitsEmbeddings == null || outfitsEmbeddings.isEmpty()) {
+            log.warn("TrendScoreService: computeBatch llamado sin outfits. Devolviendo lista vacía.");
+            return new TrendScoreBatchResponse(List.of());
+        }
+
+        log.info("TrendScoreService: Solicitando trend score batch para {} outfits", outfitsEmbeddings.size());
+
+        try {
+            TrendScoreBatchResponse response = aiTrendScoreClient.scoreTrendBatch(
+                    new TrendScoreBatchRequest(outfitsEmbeddings));
+
+            log.info("TrendScoreService: computeBatch completado — {} scores recibidos", response.scores().size());
+            return response;
+
+        } catch (FeignException e) {
+            log.error(
+                "TrendScoreService: El servicio AI falló en score batch. "
+                + "status={}, body={}. Devolviendo applies=false para todos los outfits.",
+                e.status(),
+                e.contentUTF8()
+            );
+            List<TrendScoreResponse> fallback = outfitsEmbeddings.stream()
+                    .map(ignored -> new TrendScoreResponse(0.0, false, 0))
+                    .collect(Collectors.toList());
+            return new TrendScoreBatchResponse(fallback);
         }
     }
 }

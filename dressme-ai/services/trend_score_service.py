@@ -18,31 +18,30 @@ de microservicios. Solo HTTP, sin conexiones directas a PostgreSQL.
 
 import logging
 import os
+import time
 import numpy as np
 import requests
-from schemas.trend import TrendScoreRequest, TrendScoreResponse
+from schemas.trend import TrendScoreRequest, TrendScoreResponse, TrendScoreBatchRequest, TrendScoreBatchResponse
 
 logger = logging.getLogger(__name__)
 
-# Dimensión esperada para cada embedding de prenda
 EXPECTED_DIMS = 1536
 
-# URL base de dressme-database para leer configuración de dataset
 DATABASE_SERVICE_URL = os.environ.get(
     "DATABASE_SERVICE_URL",
     "http://dressme-database:8080"
 )
 LATEST_DATASET_ENDPOINT = f"{DATABASE_SERVICE_URL}/internal/trend-dataset/config/latest"
 
+# TTL en segundos para el caché del avg_vector (default 5 min)
+AVG_VECTOR_CACHE_TTL = int(os.environ.get("TREND_VECTOR_CACHE_TTL", "300"))
+
 
 class TrendScoreService:
 
     def __init__(self):
-        """
-        Sin inyección de BD. El servicio realiza todas las consultas
-        vía HTTP a dressme-database.
-        """
-        pass
+        self._cached_vector: tuple[np.ndarray, int] | None = None
+        self._cached_at: float = 0.0
 
     # ─── API pública ───────────────────────────────────────────────────────────
 
@@ -108,21 +107,63 @@ class TrendScoreService:
             dataset_images=image_count,
         )
 
+    def score_batch(self, request: TrendScoreBatchRequest) -> TrendScoreBatchResponse:
+        logger.info(
+            "TrendScoreService: score_batch — %d outfits",
+            len(request.outfits),
+        )
+
+        # Carga avg_vector una sola vez para todo el batch (caché incluido)
+        dataset_row = self._load_latest_dataset_vector()
+
+        results: list[TrendScoreResponse] = []
+        for i, outfit_embeddings in enumerate(request.outfits):
+            if not outfit_embeddings:
+                results.append(TrendScoreResponse(trend_score=0.0, applies=False, dataset_images=0))
+                continue
+
+            for j, emb in enumerate(outfit_embeddings):
+                if len(emb) != EXPECTED_DIMS:
+                    raise ValueError(
+                        f"Outfit {i}, embedding {j}: {len(emb)} dims, se esperaban {EXPECTED_DIMS}."
+                    )
+
+            if dataset_row is None:
+                results.append(TrendScoreResponse(trend_score=0.0, applies=False, dataset_images=0))
+                continue
+
+            avg_vector, image_count = dataset_row
+            matrix = np.array(outfit_embeddings, dtype=np.float32)
+            outfit_vector = matrix.mean(axis=0)
+            similarity = self._cosine_similarity(outfit_vector, avg_vector)
+            trend_score = float((similarity + 1.0) / 2.0)
+
+            results.append(TrendScoreResponse(
+                trend_score=trend_score,
+                applies=True,
+                dataset_images=image_count,
+            ))
+
+        logger.info("TrendScoreService: score_batch completado — %d scores", len(results))
+        return TrendScoreBatchResponse(scores=results)
+
     # ─── Helpers privados ─────────────────────────────────────────────────────
 
     def _load_latest_dataset_vector(self) -> tuple[np.ndarray, int] | None:
-        """
-        Carga el avg_vector más reciente desde dressme-database
-        vía HTTP GET /internal/trend-dataset/config/latest.
+        now = time.monotonic()
+        if self._cached_vector is not None and (now - self._cached_at) < AVG_VECTOR_CACHE_TTL:
+            logger.debug("TrendScoreService: avg_vector servido desde caché")
+            return self._cached_vector
 
-        Devuelve (avg_vector: ndarray, image_count: int) o None si no hay
-        data en la BD (dataset aún no procesado).
-        """
+        fresh = self._fetch_dataset_vector()
+        if fresh is not None:
+            self._cached_vector = fresh
+            self._cached_at = now
+        return fresh
+
+    def _fetch_dataset_vector(self) -> tuple[np.ndarray, int] | None:
         try:
-            response = requests.get(
-                LATEST_DATASET_ENDPOINT,
-                timeout=10,
-            )
+            response = requests.get(LATEST_DATASET_ENDPOINT, timeout=10)
         except requests.RequestException as e:
             logger.error(
                 "TrendScoreService: Error conectando a dressme-database en %s: %s",
@@ -132,9 +173,7 @@ class TrendScoreService:
             return None
 
         if response.status_code == 404:
-            logger.warning(
-                "TrendScoreService: No hay vector de dataset en dressme-database"
-            )
+            logger.warning("TrendScoreService: No hay vector de dataset en dressme-database")
             return None
 
         if response.status_code != 200:
@@ -147,27 +186,20 @@ class TrendScoreService:
 
         try:
             data = response.json()
-            # Esperamos que la respuesta incluya avg_vector (como lista de floats)
-            # y dataset_images o imageCount con el número de imágenes.
-            # Nota: el modelo Java devuelve: id, imageCount, modelUsed, description, computedAt
-            # pero NO devuelve directamente avgVector. Necesitamos un cambio en la respuesta.
-            # Por ahora asumimos que la API devuelve el vector en algún formato.
             image_count = data.get("imageCount", 0)
-            # Aquí necesitarías que dressme-database devuelva también el avg_vector
-            # en la respuesta para poder recuperarlo. Eso requiere cambio en el DTO.
-            avg_vector = data.get("avgVector")  # Esperando que esté en la respuesta
+            avg_vector = data.get("avgVector")
             if not avg_vector:
-                logger.error(
-                    "TrendScoreService: Respuesta de dressme-database no incluye avgVector"
-                )
+                logger.error("TrendScoreService: Respuesta de dressme-database no incluye avgVector")
                 return None
             values = np.array(avg_vector, dtype=np.float32)
+            logger.info(
+                "TrendScoreService: avg_vector cargado desde dressme-database — imageCount=%d, TTL=%ds",
+                image_count,
+                AVG_VECTOR_CACHE_TTL,
+            )
             return values, image_count
         except (KeyError, ValueError) as e:
-            logger.error(
-                "TrendScoreService: Error parseando respuesta de dressme-database: %s",
-                e,
-            )
+            logger.error("TrendScoreService: Error parseando respuesta de dressme-database: %s", e)
             return None
 
     @staticmethod

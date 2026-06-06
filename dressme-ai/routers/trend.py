@@ -10,7 +10,7 @@ de outfits. No está expuesto públicamente a través del Gateway.
 import logging
 from fastapi import APIRouter, Depends, status
 
-from schemas.trend import TrendScoreRequest, TrendScoreResponse
+from schemas.trend import TrendScoreRequest, TrendScoreResponse, TrendScoreBatchRequest, TrendScoreBatchResponse
 from services.trend_score_service import TrendScoreService
 from settings.dependencies import get_trend_score_service
 
@@ -58,4 +58,23 @@ def score_trend(
         result.applies,
         result.dataset_images,
     )
+    return result
+
+
+@router.post(
+    "/score/batch",
+    response_model=TrendScoreBatchResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Calcular trend score de múltiples outfits en una sola llamada",
+)
+def score_trend_batch(
+    request: TrendScoreBatchRequest,
+    service: TrendScoreService = Depends(get_trend_score_service),
+) -> TrendScoreBatchResponse:
+    logger.info(
+        "Router: POST /internal/ai/trend/score/batch — %d outfits",
+        len(request.outfits),
+    )
+    result = service.score_batch(request)
+    logger.info("Router: score_batch completado — %d scores devueltos", len(result.scores))
     return result
