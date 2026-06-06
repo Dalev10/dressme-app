@@ -113,6 +113,12 @@ public class OutfitOrchestratorServiceImpl implements OutfitOrchestratorService 
                 List<ClothingEmbeddingInfo> wardrobe = ensureEmbeddingsReady(userId, request, embeddingCandidates);
                 log.info("Outfit: {} prendas disponibles tras Step 0", wardrobe.size());
 
+                if (wardrobe.isEmpty()) {
+                        log.info("Outfit: guardarropa vacío para ocasión={} clima={} — retornando respuesta vacía",
+                                        request.occasionId(), request.weatherId());
+                        return new OutfitGenerationResponse(List.of(), 0);
+                }
+
                 // ── Paso 1: validar slots mínimos ─────────────────────────────────────
                 validateSlots(wardrobe);
 
