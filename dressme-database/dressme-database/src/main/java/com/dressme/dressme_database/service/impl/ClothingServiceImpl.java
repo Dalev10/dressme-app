@@ -217,9 +217,9 @@ public class ClothingServiceImpl implements ClothingService {
 
         // Actualizar categoría en tbl_clothes
         clothing.setCategory(category);
-        // ✦ Marcar embedding como desactualizado: el usuario corrigió la prenda
-        // después de que se vectorizó, así que el embedding es inválido.
-        // El motor de recomendación lo detectará y re-vectorizará antes de calcular outfits.
+        // Invariante: vector corrupto eliminado
+        clothing.setEmbeddingVector(null);
+        // Señal para re-vectorización 
         clothing.setEmbeddingStale(true);
 
         // Actualizar audit — crear si aún no existe (prenda no procesada por IA
@@ -237,11 +237,6 @@ public class ClothingServiceImpl implements ClothingService {
         * active learning y reentrenamiento IA.
         */
 
-        ClothingCategory previousCategory =
-                audit.getPredictedCategory();
-
-        Style previousStyle =
-                audit.getPredictedStyle();
 
         audit.setPredictedCategory(category);
         audit.setPredictedStyle(style);
@@ -256,7 +251,7 @@ public class ClothingServiceImpl implements ClothingService {
         clothingRepository.save(clothing);
         auditRepository.save(audit);
 
-        log.info("ClothingService: Prenda {} actualizada manualmente — was_corrected=true",
+        log.info("ClothingService: Prenda {} actualizada — embedding was_corrected=true",
                 clothingId);
 
         return toDetail(clothing, audit);
@@ -442,6 +437,76 @@ public class ClothingServiceImpl implements ClothingService {
         }
 
         log.info("ClothingService: {} prendas retornadas para outfit generation", result.size());
+        return result;
+    }
+
+    // ── Step 0 candidates (includes null/stale embeddings) ───────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ClothingEmbeddingDTO> getCandidatesForOutfit(
+            UUID userId, UUID occasionId, UUID weatherId) {
+
+        log.info("ClothingService: Cargando candidatos para Step 0 (incl. sin embedding) — " +
+                 "userId={}, occasionId={}, weatherId={}", userId, occasionId, weatherId);
+
+        if (!userRepository.existsById(userId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Usuario no encontrado: " + userId);
+        }
+
+        List<ClothingWithEmbeddingProjection> projections =
+                clothingRepository.findCandidatesForOutfitGeneration(userId, occasionId, weatherId);
+
+        if (projections.isEmpty()) {
+            log.info("ClothingService: Sin candidatos para userId={}", userId);
+            return List.of();
+        }
+
+        List<UUID> ids = projections.stream()
+                .map(ClothingWithEmbeddingProjection::getClothingId)
+                .collect(Collectors.toList());
+
+        List<Clothing> clothingEntities = clothingRepository.findEmbeddingsByIds(ids);
+
+        // Use explicit HashMap to allow null embeddingVector values
+        Map<UUID, float[]> embeddingMap = new java.util.HashMap<>();
+        for (Clothing c : clothingEntities) {
+            embeddingMap.put(c.getId(), c.getEmbeddingVector());
+        }
+
+        List<ClothingEmbeddingDTO> result = new ArrayList<>(projections.size());
+        for (ClothingWithEmbeddingProjection p : projections) {
+            String slot = CategorySlotMapper.toSlot(p.getCategoryName(), p.getParentName());
+            if (slot == null) {
+                log.debug("ClothingService: candidato {} omitido — categoría '{}' no mapea a slot",
+                          p.getClothingId(), p.getCategoryName());
+                continue;
+            }
+
+            float[] rawVector = embeddingMap.get(p.getClothingId());
+            List<Float> embeddingList = null;
+            if (rawVector != null) {
+                embeddingList = new ArrayList<>(rawVector.length);
+                for (float v : rawVector) {
+                    embeddingList.add(v);
+                }
+            }
+
+            result.add(new ClothingEmbeddingDTO(
+                    p.getClothingId(),
+                    slot,
+                    p.getDetectedHue(),
+                    p.getDetectedSaturation(),
+                    p.getDetectedLightness(),
+                    embeddingList,
+                    p.getOccasionName(),
+                    p.getWeatherName()
+            ));
+        }
+
+        long nullCount = result.stream().filter(d -> d.embeddingVector() == null).count();
+        log.info("ClothingService: {} candidatos retornados ({} sin embedding)", result.size(), nullCount);
         return result;
     }
 

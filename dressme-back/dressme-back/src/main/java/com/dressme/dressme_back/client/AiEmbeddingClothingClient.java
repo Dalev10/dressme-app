@@ -3,6 +3,8 @@ package com.dressme.dressme_back.client;
 import com.dressme.dressme_back.schema.dto.ClothingEmbeddingRequest;
 import com.dressme.dressme_back.schema.dto.ClothingEmbeddingResponse;
 import org.springframework.cloud.openfeign.FeignClient;
+
+import java.util.List;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -21,4 +23,7 @@ public interface AiEmbeddingClothingClient {
 
     @PostMapping("/ai/outfit/embed-clothing")
     ClothingEmbeddingResponse embedClothing(@RequestBody ClothingEmbeddingRequest request);
+
+    @PostMapping("/ai/outfit/embed-clothing/batch")
+    List<ClothingEmbeddingResponse> embedClothingBatch(@RequestBody List<ClothingEmbeddingRequest> requests);
 }

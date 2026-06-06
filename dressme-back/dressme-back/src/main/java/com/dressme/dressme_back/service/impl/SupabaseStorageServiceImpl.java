@@ -3,6 +3,8 @@ package com.dressme.dressme_back.service.impl;
 import com.dressme.dressme_back.config.SupabaseStorageProperties;
 import com.dressme.dressme_back.service.StorageService;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -111,7 +113,7 @@ public class SupabaseStorageServiceImpl implements StorageService {
         String objectPath = imageUrl.substring(publicPrefix.length());
 
         // DELETE /storage/v1/object/{bucket} con body {"prefixes": ["objectPath"]}
-        storageClient.delete()
+        storageClient.method(HttpMethod.DELETE)
                 .uri("/storage/v1/object/" + props.getBucket())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("prefixes", List.of(objectPath)))
