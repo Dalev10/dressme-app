@@ -70,7 +70,7 @@ public interface ClothingRepository extends JpaRepository<Clothing, UUID> {
      * @param weatherId  clima para el que se genera el outfit
      */
     @Query("""
-        SELECT
+        SELECT DISTINCT
             c.id                                            AS clothingId,
             cat.name                                        AS categoryName,
             cat.parent.name                                 AS parentName,
@@ -129,7 +129,7 @@ public interface ClothingRepository extends JpaRepository<Clothing, UUID> {
      * @param weatherId  clima para el que se genera el outfit
      */
     @Query("""
-        SELECT
+        SELECT DISTINCT
             c.id                                            AS clothingId,
             cat.name                                        AS categoryName,
             cat.parent.name                                 AS parentName,
