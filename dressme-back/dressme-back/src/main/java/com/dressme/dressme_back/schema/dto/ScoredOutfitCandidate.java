@@ -26,38 +26,38 @@ public record ScoredOutfitCandidate(
          * Vector semántico del outfit (1536 dims).
          * Calculado por dressme-ai. Usado por TrendScoreService y para persistencia.
          */
-        @JsonProperty("outfit_vector")
+        @JsonProperty("outfitVector")
         List<Float> outfitVector,
 
         /**
          * Similitud coseno entre outfit_vector y dresscode_embedding [0.0–1.0].
          * Calculado por dressme-ai (DresscodeSimilarityService).
          */
-        @JsonProperty("dresscode_score")
+        @JsonProperty("dresscodeScore")
         double dresscodeScore,
 
         /**
          * Inicializado en 0.0 por AI. Calculado en Back por ColorScoreService.
          */
-        @JsonProperty("color_score")
+        @JsonProperty("colorScore")
         double colorScore,
 
         /**
          * Inicializado en 0.0 por AI. Calculado en Back por TasteSimilarityService.
          */
-        @JsonProperty("taste_score")
+        @JsonProperty("tasteScore")
         double tasteScore,
 
         /**
          * Inicializado en 0.0 por AI. Calculado en Back por TrendScoreService.
          */
-        @JsonProperty("trend_score")
+        @JsonProperty("trendScore")
         double trendScore,
 
         /**
          * Inicializado en 0.0 por AI. Calculado en Back por ScoreEngineService.
          */
-        @JsonProperty("total_score")
+        @JsonProperty("totalScore")
         double totalScore
 
 ) {
@@ -69,7 +69,7 @@ public record ScoredOutfitCandidate(
             @JsonProperty("slot")
             String slot,
 
-            @JsonProperty("clothing_id") 
+            @JsonProperty("clothingId")
             UUID clothingId
     ) {}
 }
