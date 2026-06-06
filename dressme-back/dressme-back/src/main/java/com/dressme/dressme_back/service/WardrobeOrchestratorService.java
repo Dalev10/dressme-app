@@ -40,4 +40,7 @@ public interface WardrobeOrchestratorService {
 
     /** Guardarropa filtrado por ocasión y clima, con embeddings, para outfit generation. */
     List<ClothingEmbeddingInfo> getWardrobeForOutfit(UUID userId, UUID occasionId, UUID weatherId);
+
+    /** Candidatos para Step 0: incluye prendas con embedding null o stale. */
+    List<ClothingEmbeddingInfo> getCandidatesForOutfit(UUID userId, UUID occasionId, UUID weatherId);
 }

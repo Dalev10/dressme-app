@@ -81,6 +81,16 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .body(new ParameterizedTypeReference<List<ClothingEmbeddingInfo>>() {});
     }
 
+    @Override
+    public List<ClothingEmbeddingInfo> getCandidatesForOutfit(UUID userId, UUID occasionId, UUID weatherId) {
+        log.info("Wardrobe: getCandidatesForOutfit — usuario {}, ocasión {}, clima {}", userId, occasionId, weatherId);
+        return databaseClient.get()
+                .uri("/internal/wardrobe/user/{userId}/candidates-for-outfit?occasionId={occasionId}&weatherId={weatherId}",
+                        userId, occasionId, weatherId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<ClothingEmbeddingInfo>>() {});
+    }
+
     // ── Detalle compuesto ─────────────────────────────────────────────────────
 
     @Override

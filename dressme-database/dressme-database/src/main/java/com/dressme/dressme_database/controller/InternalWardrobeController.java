@@ -121,6 +121,21 @@ public class InternalWardrobeController {
         return ResponseEntity.ok(wardrobe);
     }
 
+    // ── Candidatos para Step 0 (incluye prendas sin embedding) ───────────────
+
+    @GetMapping("/user/{userId}/candidates-for-outfit")
+    public ResponseEntity<List<ClothingEmbeddingDTO>> getCandidatesForOutfit(
+            @PathVariable UUID userId,
+            @RequestParam  UUID occasionId,
+            @RequestParam  UUID weatherId) {
+        log.info("DB-Wardrobe: GET /user/{}/candidates-for-outfit — occasionId={}, weatherId={}",
+                userId, occasionId, weatherId);
+        List<ClothingEmbeddingDTO> candidates =
+                clothingService.getCandidatesForOutfit(userId, occasionId, weatherId);
+        log.info("DB-Wardrobe: {} candidatos devueltos para Step 0 — userId={}", candidates.size(), userId);
+        return ResponseEntity.ok(candidates);
+    }
+
     // ── Detalle compuesto (vista prenda + audit) ──────────────────────────────
 
     /**

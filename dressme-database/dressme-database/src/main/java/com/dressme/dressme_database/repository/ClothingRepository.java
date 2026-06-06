@@ -115,4 +115,44 @@ public interface ClothingRepository extends JpaRepository<Clothing, UUID> {
      */
     @Query("SELECT c FROM Clothing c WHERE c.id IN :ids")
     List<Clothing> findEmbeddingsByIds(@Param("ids") List<UUID> ids);
+
+    /**
+     * Candidatos para Step 0 del orquestador: todas las prendas procesadas que
+     * coincidan con ocasión y clima, SIN filtrar por embedding.
+     *
+     * Incluye prendas con embeddingVector = null o isEmbeddingStale = true.
+     * El orquestador detecta cuáles necesitan reparación y llama a dressme-ai
+     * para vectorizarlas antes de la generación real.
+     *
+     * @param userId     propietario del guardarropa
+     * @param occasionId ocasión para la que se genera el outfit
+     * @param weatherId  clima para el que se genera el outfit
+     */
+    @Query("""
+        SELECT
+            c.id                                            AS clothingId,
+            cat.name                                        AS categoryName,
+            cat.parent.name                                 AS parentName,
+            audit.detectedHue                               AS detectedHue,
+            audit.detectedSaturation                        AS detectedSaturation,
+            audit.detectedLightness                         AS detectedLightness,
+            occ.name                                        AS occasionName,
+            w.name                                          AS weatherName
+        FROM Clothing c
+        JOIN ClothingAiAudit audit ON audit.clothing.id = c.id
+        JOIN c.category cat
+        JOIN ClothingOccasion co  ON co.clothing.id = c.id
+        JOIN co.occasion occ
+        JOIN ClothingWeather cw   ON cw.clothing.id = c.id
+        JOIN cw.weather w
+        WHERE c.user.id          = :userId
+          AND c.isProcessed       = true
+          AND occ.id             = :occasionId
+          AND w.id               = :weatherId
+        """)
+    List<ClothingWithEmbeddingProjection> findCandidatesForOutfitGeneration(
+            @Param("userId")     UUID userId,
+            @Param("occasionId") UUID occasionId,
+            @Param("weatherId")  UUID weatherId
+    );
 }

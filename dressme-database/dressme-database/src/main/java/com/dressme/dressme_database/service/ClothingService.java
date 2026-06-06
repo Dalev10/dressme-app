@@ -78,6 +78,13 @@ public interface ClothingService {
     List<ClothingEmbeddingDTO> getClothingForOutfit(UUID userId, UUID occasionId, UUID weatherId);
 
     /**
+     * Candidatos para Step 0: prendas procesadas que coincidan con ocasión y clima,
+     * incluyendo las que tienen embeddingVector = null o isEmbeddingStale = true.
+     * El orquestador usa esta lista para detectar qué prendas reparar antes de generar.
+     */
+    List<ClothingEmbeddingDTO> getCandidatesForOutfit(UUID userId, UUID occasionId, UUID weatherId);
+
+    /**
      * Persiste el embedding vectorial generado por dressme-ai tras el análisis de visión.
      * Actualiza tbl_clothes.embedding_vector y marca is_embedding_stale = false.
      */

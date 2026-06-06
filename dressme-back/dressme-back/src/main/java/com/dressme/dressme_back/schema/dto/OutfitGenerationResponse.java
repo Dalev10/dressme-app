@@ -21,9 +21,18 @@ public record OutfitGenerationResponse(
         List<OutfitResponse> outfits,
 
         /**
-         * Total de outfits persistidos en esta sesión de generación.
-         * Útil para que el cliente sepa cuántos outfits nuevos están disponibles.
+         * Total de outfits persistidos en esta sesión de generación
+         * Útil para que el cliente sepa cuántos outfits nuevos están disponibles
          */
-        int totalGenerated
+        int totalGenerated,
+        /**
+         * Avisos no fatales ocurridos durante la generación.
+         * Ejemplo: algunas prendas no pudieron repararse y fueron excluidas.
+         */
+        List<GenerationWarning> warnings
 
-) {}
+) {
+        public OutfitGenerationResponse(List<OutfitResponse> outfits, int totalGenerated) {
+                this(outfits, totalGenerated, List.of());
+        }
+}
