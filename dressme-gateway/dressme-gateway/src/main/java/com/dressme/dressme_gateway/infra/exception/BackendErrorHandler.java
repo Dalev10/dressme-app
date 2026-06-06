@@ -21,6 +21,15 @@ public final class BackendErrorHandler {
 
     private BackendErrorHandler() {}
 
+    private static String extractMessage(String body) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode node =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(body);
+            if (node.has("message")) return node.get("message").asText();
+        } catch (Exception ignored) {}
+        return body.isBlank() ? "Error en la petición al servicio backend." : body;
+    }
+
     public static void handle(HttpRequest request, ClientHttpResponse response) throws IOException {
         HttpStatusCode status = response.getStatusCode();
         String uri = request.getURI().toString();
@@ -42,11 +51,10 @@ public final class BackendErrorHandler {
         }
 
         if (status.is4xxClientError()) {
-            log.warn("Error del cliente en llamada al backend ({}). URI: {}", status, uri);
-            throw new ResponseStatusException(
-                status,
-                "Error en la petición al servicio backend."
-            );
+            String body = new String(response.getBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            log.warn("Error del cliente en llamada al backend ({}). URI: {} — body: {}", status, uri, body);
+            String message = extractMessage(body);
+            throw new ResponseStatusException(status, message);
         }
 
         if (status.is5xxServerError()) {
