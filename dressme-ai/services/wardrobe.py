@@ -26,10 +26,12 @@ logger = logging.getLogger(__name__)
 
 # ── Modelos Gemini ────────────────────────────────────────────────────────────
 # Modelo principal para análisis visual de prendas.
-# gemini-2.0-flash se usa como fallback a partir del intento 2 cuando el
+# gemini-2.5-flash-lite se usa como fallback a partir del intento 2 cuando el
 # modelo principal responde 503 (alta demanda) o 429 (rate-limit agotado).
 GEMINI_VISION_MODEL         = "gemini-2.5-flash"
-GEMINI_VISION_FALLBACK_MODEL = "gemini-2.0-flash"
+# gemini-2.0-flash fue retirado por Google el 1 de junio de 2026.
+# Reemplazo oficial declarado: gemini-2.5-flash-lite.
+GEMINI_VISION_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 
 # ── Política de reintentos ────────────────────────────────────────────────────
 # _MAX_RETRIES:      número total de intentos (1 principal + 2 con fallback).
