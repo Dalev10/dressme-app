@@ -204,6 +204,31 @@ public class WardrobeController {
         return ResponseEntity.ok(updated);
     }
 
+    // ── Re-análisis ───────────────────────────────────────────────────────────
+
+    /**
+     * POST /api/v1/wardrobe/{clothingId}/reanalyze
+     *
+     * Re-dispara el análisis IA para una prenda que no pudo ser procesada.
+     * Devuelve 202 Accepted si el re-análisis fue encolado correctamente.
+     */
+    @PostMapping("/{clothingId}/reanalyze")
+    public ResponseEntity<Void> reanalyzeClothing(
+            @PathVariable UUID clothingId) {
+
+        log.info("Gateway-Wardrobe: POST /{}/reanalyze", clothingId);
+
+        String internalToken = jwtTokenProvider.generateInternalServiceToken("dressme-gateway");
+
+        backClient.post()
+                .uri("/internal/wardrobe/{clothingId}/reanalyze", clothingId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + internalToken)
+                .retrieve()
+                .toBodilessEntity();
+
+        return ResponseEntity.accepted().build(); // 202
+    }
+
     // ── Eliminación ───────────────────────────────────────────────────────────
 
     /**
