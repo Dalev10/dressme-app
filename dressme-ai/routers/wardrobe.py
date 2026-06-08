@@ -1,9 +1,10 @@
-import logging
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
-from schemas.wardrobe import VisionAnalysisRequest, VisionAnalysisResponse
+from schemas.wardrobe import VisionAnalysisRequest
 from services.wardrobe import WardrobeAnalysisService
 from settings.dependencies import get_wardrobe_analysis_service
 
@@ -32,8 +33,9 @@ router = APIRouter(
     entre prendas (complementarios, análogos, triádicos) en lugar de comparar
     solo UUIDs de color.
 
-    **Error:** si Gemini no puede analizar la imagen, devuelve HTTP 503.
-    El backend reintenta o notifica al usuario para que corrija la prenda manualmente.
+    **Fallback:** si Gemini no puede clasificar la imagen tras agotar los reintentos,
+    la prenda se asigna a "Uncategorized" con confidence_score=0.0.
+    El usuario puede corregirla manualmente.
 
     Consumido exclusivamente por **dressme-back** (red interna Docker).
     """,
@@ -49,13 +51,21 @@ def analyze_clothing(
     try:
         result = service.analyze(request)
     except Exception as e:
+        # Este bloque solo se alcanza si analyze() relanza en lugar de absorber.
+        # En la implementación actual analyze() siempre retorna (con fallback
+        # a Uncategorized si Gemini falla), por lo que llegar aquí indicaría
+        # un error inesperado de infraestructura (catálogo vacío, OOM, etc.).
+        # Registrar con detalle y responder 503 sin exponer el stacktrace al caller.
         logger.error(
             "Router: Análisis fallido para prenda %s: %s",
             request.clothing_id, e,
         )
-        raise HTTPException(
+        return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Vision analysis failed for clothing {request.clothing_id}: {e}",
+            content={
+                "detail": "AI analysis temporarily unavailable. The clothing item was saved and can be retried.",
+                "clothing_id": str(request.clothing_id),
+            },
         )
 
     payload_json = result.model_dump_json()

@@ -1,17 +1,18 @@
 """
-services/wardrobe_service.py
+services/wardrobe.py
 """
 
-import base64
 import json
 import logging
 import re
+import time
 from decimal import Decimal
 from uuid import UUID
 
 import requests
 from google import genai
 from google.genai import types
+from google.api_core.exceptions import ServiceUnavailable, ResourceExhausted
 
 from schemas.wardrobe import (
     CatalogData,
@@ -23,14 +24,33 @@ from services.catalog_provider import CatalogProvider
 
 logger = logging.getLogger(__name__)
 
-GEMINI_VISION_MODEL = "gemini-2.5-flash"
+# ── Modelos Gemini ────────────────────────────────────────────────────────────
+# Modelo principal para análisis visual de prendas.
+# gemini-2.0-flash se usa como fallback a partir del intento 2 cuando el
+# modelo principal responde 503 (alta demanda) o 429 (rate-limit agotado).
+GEMINI_VISION_MODEL         = "gemini-2.5-flash"
+GEMINI_VISION_FALLBACK_MODEL = "gemini-2.0-flash"
+
+# ── Política de reintentos ────────────────────────────────────────────────────
+# _MAX_RETRIES:      número total de intentos (1 principal + 2 con fallback).
+# _BACKOFF_SECONDS:  segundos de espera antes de cada reintento.
+#                    Índice 0 → espera antes del intento 2 (primer reintento).
+#                    Índice 1 → espera antes del intento 3 (segundo reintento).
+# _RETRYABLE_ERRORS: solo se reintenta en errores de disponibilidad del proveedor.
+#                    Errores de parsing, red, o autenticación no se reintentan.
+_MAX_RETRIES     = 3
+_BACKOFF_SECONDS = [2, 5]
+_RETRYABLE_ERRORS = (ServiceUnavailable, ResourceExhausted)
 
 
 class WardrobeAnalysisService:
     def __init__(self, api_key: str, catalog: CatalogProvider):
         self._client = genai.Client(api_key=api_key)
         self._catalog = catalog
-        logger.info("WardrobeAnalysisService: Inicializado con modelo %s", GEMINI_VISION_MODEL)
+        logger.info(
+            "WardrobeAnalysisService: Inicializado — modelo principal=%s, fallback=%s",
+            GEMINI_VISION_MODEL, GEMINI_VISION_FALLBACK_MODEL,
+        )
 
     def analyze(self, request: VisionAnalysisRequest) -> VisionAnalysisResponse:
         logger.info(
@@ -38,14 +58,26 @@ class WardrobeAnalysisService:
             request.clothing_id, request.image_url,
         )
         catalog = self._catalog.get_catalog()
-        raw  = self._call_gemini(request.image_url, catalog)
-        data = self._parse_response(raw)
-        return self._build_response(request.clothing_id, data)
+
+        try:
+            raw  = self._call_gemini(request.image_url, catalog)
+            data = self._parse_response(raw)
+            return self._build_response(request.clothing_id, data)
+        except Exception as e:
+            logger.error(
+                "WardrobeAnalysisService: Error analizando prenda %s: %s. "
+                "Aplicando fallback a 'Uncategorized'.",
+                request.clothing_id, e,
+            )
+            return self._build_uncategorized_response(request.clothing_id, catalog)
 
     def _call_gemini(self, image_url: str, catalog: CatalogData) -> str:
+        # ── Paso 1: descargar imagen una sola vez antes del loop de reintentos ──
+        # La imagen se descarga aquí y no dentro del loop para no repetir la
+        # llamada HTTP a Supabase en cada reintento. Solo Gemini se reintenta.
         logger.info("WardrobeAnalysisService: Descargando imagen desde %s", image_url)
-        response = requests.get(image_url, timeout=30)
-        response.raise_for_status()
+        img_response = requests.get(image_url, timeout=30)
+        img_response.raise_for_status()
 
         mime_type = "image/jpeg"
         if image_url.lower().endswith(".png"):
@@ -55,21 +87,77 @@ class WardrobeAnalysisService:
         elif image_url.lower().endswith(".gif"):
             mime_type = "image/gif"
 
-        image_base64 = base64.standard_b64encode(response.content).decode("utf-8")
+        image_bytes = img_response.content
         logger.info(
             "WardrobeAnalysisService: Imagen descargada (%d bytes, tipo: %s)",
-            len(response.content), mime_type
+            len(image_bytes), mime_type,
         )
 
-        gemini_response = self._client.models.generate_content(
-            model=GEMINI_VISION_MODEL,
-            contents=[
-                types.Part.from_text(text=self._build_prompt(catalog)),
-                types.Part.from_bytes(data=base64.b64decode(image_base64), mime_type=mime_type),
-            ],
-        )
+        # ── Paso 2: construir el prompt una sola vez ──────────────────────────
+        # El prompt depende solo del catálogo (que ya fue resuelto por el caller),
+        # no de la imagen, así que también se construye fuera del loop.
+        prompt = self._build_prompt(catalog)
 
-        return gemini_response.text
+        # ── Paso 3: loop de reintentos ────────────────────────────────────────
+        last_exc: Exception | None = None
+
+        for attempt in range(_MAX_RETRIES):
+            # Intento 0 → modelo principal (gemini-2.5-flash).
+            # Intentos 1+ → modelo fallback (gemini-2.0-flash).
+            # Cambiar de modelo en el reintento maximiza la probabilidad de éxito:
+            # si el modelo principal está saturado, el fallback suele responder.
+            model = GEMINI_VISION_MODEL if attempt == 0 else GEMINI_VISION_FALLBACK_MODEL
+
+            if attempt > 0:
+                wait = _BACKOFF_SECONDS[attempt - 1]
+                logger.warning(
+                    "WardrobeAnalysisService: Reintento %d/%d — modelo=%s, esperando %ds "
+                    "(error previo: %s: %s)",
+                    attempt, _MAX_RETRIES - 1, model, wait,
+                    type(last_exc).__name__, last_exc,
+                )
+                time.sleep(wait)
+
+            try:
+                logger.info(
+                    "WardrobeAnalysisService: Llamando a Gemini — modelo=%s, intento=%d",
+                    model, attempt + 1,
+                )
+                gemini_response = self._client.models.generate_content(
+                    model=model,
+                    contents=[
+                        types.Part.from_text(text=prompt),
+                        types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    ],
+                )
+                logger.info(
+                    "WardrobeAnalysisService: Gemini respondió exitosamente — modelo=%s, intento=%d",
+                    model, attempt + 1,
+                )
+                return gemini_response.text
+
+            except _RETRYABLE_ERRORS as e:
+                # ServiceUnavailable (503) y ResourceExhausted (429) son errores
+                # transitorios del proveedor; tiene sentido reintentar.
+                last_exc = e
+                logger.warning(
+                    "WardrobeAnalysisService: Gemini %s — %s (intento %d/%d)",
+                    model, type(e).__name__, attempt + 1, _MAX_RETRIES,
+                )
+                continue
+
+            # Cualquier otra excepción (error de red, autenticación, etc.)
+            # se deja propagar inmediatamente sin reintentar — no tiene sentido
+            # esperar si la causa no es saturación del proveedor.
+
+        # ── Todos los intentos agotados ───────────────────────────────────────
+        # Lanzar RuntimeError con contexto para que analyze() lo capture,
+        # lo registre con detalle y aplique el fallback a Uncategorized.
+        raise RuntimeError(
+            f"Gemini no disponible tras {_MAX_RETRIES} intentos "
+            f"(modelos: {GEMINI_VISION_MODEL}, {GEMINI_VISION_FALLBACK_MODEL}). "
+            f"Último error: {type(last_exc).__name__}: {last_exc}"
+        ) from last_exc
 
     def _build_prompt(self, catalog: CatalogData) -> str:
         def fmt(entries: list[dict]) -> str:
@@ -594,61 +682,32 @@ O3. EVERYDAY IS NOT A SAFE DEFAULT:
     specific variant (unstructured, linen, relaxed) genuinely supports it.
 
 O4. OCCASION UNION FROM STYLES: The final occasion list must be coherent with
-    the styles assigned in Part 1. Occasions outside the union of style-valid
-    occasions require explicit physical justification.
-
-O5. FESTIVAL ≠ PARTY:
-    Festival → outdoor music events, street fairs (Coachella, Burning Man energy).
-    Party → indoor social gatherings, birthdays, clubs.
-    Many garments qualify for both; never substitute one for the other.
-
-O6. DATE NIGHT ≠ FORMAL EVENT:
-    Date Night → intimate dinners, rooftop bars, casual-chic settings.
-    Formal Event → black-tie, galas, weddings requiring strict dress codes.
-    A cocktail dress qualifies for both. A ballgown does not qualify for Date Night.
+    the styles assigned in Part 1. If a style forbids an occasion, that occasion
+    cannot appear even if the category table allows it.
 
 
 ═══════════════════════════════════════════════════════════════════════
-STEP-BY-STEP CLASSIFICATION (reason before outputting)
+CATALOGS — USE ONLY THESE IDs
 ═══════════════════════════════════════════════════════════════════════
 
-Step 1: What is the exact garment type and subcategory?
-         (e.g., "linen midi skirt", "heavyweight flannel shirt", "moto leather jacket")
-Step 2: What is the dominant color? Convert to HSL.
-Step 3: STYLE ELIMINATION — rule out all styles whose signature contradicts the garment.
-         Eliminate at least 3. List the survivors.
-Step 4: From the surviving styles, assign ALL that genuinely fit.
-Step 5: WEATHER — inspect fabric and weight. Apply the category weather rules above.
-         Assign ALL valid weather IDs (minimum 2 unless extreme garment).
-Step 6: OCCASION — apply the category occasion rules + style occasion union.
-         Assign ALL valid occasion IDs (minimum 2).
-         Explicitly verify: "Is Beach & Pool warranted?" — only if swimwear/resort.
-         Explicitly verify: "Is Everyday the only occasion?" — if yes, re-examine.
-Step 7: Output the JSON.
-
-
-═══════════════════════════════════════════════════════════════════════
-CATALOGS
-═══════════════════════════════════════════════════════════════════════
-
-CATALOG — CATEGORIES:
+CATEGORIES:
 {fmt(catalog.categories)}
 
-CATALOG — STYLES:
+STYLES:
 {fmt(catalog.styles)}
 
-CATALOG — COLORS (choose the closest match to the detected color):
+COLORS:
 {fmt(catalog.colors)}
 
-CATALOG — WEATHER (ALL suitable conditions — minimum 2 unless extreme):
+WEATHERS:
 {fmt(catalog.weathers)}
 
-CATALOG — OCCASIONS (ALL suitable occasions — minimum 2):
+OCCASIONS:
 {fmt(catalog.occasions)}
 
 
 ═══════════════════════════════════════════════════════════════════════
-ANTI-PATTERN EXAMPLES — DO NOT DO THIS
+EXAMPLES
 ═══════════════════════════════════════════════════════════════════════
 
 ❌ WRONG — collapsed classification:
@@ -703,7 +762,7 @@ REQUIRED JSON FORMAT
         if missing_color := required_color - set(data["color"].keys()):
             raise ValueError(f"Gemini omitió campos del color: {missing_color}")
 
-        for key in ("category_id",):  # style_id ya no es escalar
+        for key in ("category_id",):
             try:
                 UUID(str(data[key]))
             except ValueError:
@@ -716,7 +775,7 @@ REQUIRED JSON FORMAT
         elif isinstance(style_raw, list):
             style_ids = style_raw
         else:
-            raise ValueError("style_id' debe ser un UUID o lista de UUIDs.")
+            raise ValueError("'style_id' debe ser un UUID o lista de UUIDs.")
 
         for uid in style_ids:
             try:
@@ -724,8 +783,8 @@ REQUIRED JSON FORMAT
             except ValueError:
                 raise ValueError(f"'{uid}' en 'style_id' no es un UUID válido.")
 
-        data["style_ids"] = style_ids          # normalizado como lista
-        data["style_id"]  = style_ids[0]   
+        data["style_ids"] = style_ids
+        data["style_id"]  = style_ids[0]
 
         for list_key in ("weather_ids", "occasion_ids"):
             if not isinstance(data[list_key], list) or len(data[list_key]) == 0:
@@ -769,3 +828,27 @@ REQUIRED JSON FORMAT
             ai_provider="gemini_vision",
         )
 
+    def _build_uncategorized_response(
+        self, clothing_id: UUID, catalog: CatalogData
+    ) -> VisionAnalysisResponse:
+        def first(entries: list[dict]) -> UUID:
+            if not entries:
+                raise RuntimeError("Catálogo vacío. Verifica el seed de dressme-database.")
+            return UUID(entries[0]["id"])
+
+        uncategorized = next(
+            (c for c in catalog.categories if c["name"].lower() == "uncategorized"), None
+        )
+        return VisionAnalysisResponse(
+            clothing_id=clothing_id,
+            predicted_category_id=UUID(uncategorized["id"]) if uncategorized else first(catalog.categories),
+            predicted_style_id=first(catalog.styles),
+            predicted_weather_ids=[first(catalog.weathers)],
+            predicted_occasion_ids=[first(catalog.occasions)],
+            detected_color_hsl=DetectedColorHSL(
+                hue=0, saturation=0, lightness=50,
+                color_catalog_id=first(catalog.colors),
+            ),
+            confidence_score=Decimal("0.0"),
+            ai_provider="gemini_vision",
+        )
