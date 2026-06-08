@@ -12,7 +12,7 @@ from uuid import UUID
 import requests
 from google import genai
 from google.genai import types
-from google.api_core.exceptions import ServiceUnavailable, ResourceExhausted
+from google.genai import errors as genai_errors
 
 from schemas.wardrobe import (
     CatalogData,
@@ -36,11 +36,14 @@ GEMINI_VISION_FALLBACK_MODEL = "gemini-2.0-flash"
 # _BACKOFF_SECONDS:  segundos de espera antes de cada reintento.
 #                    Índice 0 → espera antes del intento 2 (primer reintento).
 #                    Índice 1 → espera antes del intento 3 (segundo reintento).
-# _RETRYABLE_ERRORS: solo se reintenta en errores de disponibilidad del proveedor.
+# _RETRYABLE_CODES:  solo se reintenta en errores de disponibilidad del proveedor.
 #                    Errores de parsing, red, o autenticación no se reintentan.
-_MAX_RETRIES     = 3
-_BACKOFF_SECONDS = [2, 5]
-_RETRYABLE_ERRORS = (ServiceUnavailable, ResourceExhausted)
+_MAX_RETRIES      = 3
+_BACKOFF_SECONDS  = [2, 5]
+# google-genai 2.7.0 lanza su propia jerarquía (ServerError/ClientError),
+# separada de google-api-core. Ambas exponen .code con el HTTP status real.
+# Solo reintentamos 503 (alta demanda) y 429 (rate-limit agotado).
+_RETRYABLE_CODES  = {503, 429}
 
 
 class WardrobeAnalysisService:
@@ -136,27 +139,25 @@ class WardrobeAnalysisService:
                 )
                 return gemini_response.text
 
-            except _RETRYABLE_ERRORS as e:
-                # ServiceUnavailable (503) y ResourceExhausted (429) son errores
-                # transitorios del proveedor; tiene sentido reintentar.
-                last_exc = e
-                logger.warning(
-                    "WardrobeAnalysisService: Gemini %s — %s (intento %d/%d)",
-                    model, type(e).__name__, attempt + 1, _MAX_RETRIES,
-                )
-                continue
+            except genai_errors.APIError as e:
+                # APIError es la base de ServerError (5xx) y ClientError (4xx).
+                # Solo reintentamos si el código es reintentable (503 / 429).
+                # Un 500 interno de Gemini o un 400 de request inválido no mejoran
+                # con reintentos — se propagan para activar el fallback inmediato.
+                if e.code in _RETRYABLE_CODES:
+                    last_exc = e
+                    logger.warning(
+                        "WardrobeAnalysisService: Gemini %s — HTTP %d %s (intento %d/%d)",
+                        model, e.code, e.status, attempt + 1, _MAX_RETRIES,
+                    )
+                    continue
+                raise
 
-            # Cualquier otra excepción (error de red, autenticación, etc.)
-            # se deja propagar inmediatamente sin reintentar — no tiene sentido
-            # esperar si la causa no es saturación del proveedor.
-
-        # ── Todos los intentos agotados ───────────────────────────────────────
-        # Lanzar RuntimeError con contexto para que analyze() lo capture,
-        # lo registre con detalle y aplique el fallback a Uncategorized.
+        # Todos los intentos agotados con códigos reintentables (503/429).
         raise RuntimeError(
             f"Gemini no disponible tras {_MAX_RETRIES} intentos "
             f"(modelos: {GEMINI_VISION_MODEL}, {GEMINI_VISION_FALLBACK_MODEL}). "
-            f"Último error: {type(last_exc).__name__}: {last_exc}"
+            f"Último error: HTTP {last_exc.code} {last_exc.status}"
         ) from last_exc
 
     def _build_prompt(self, catalog: CatalogData) -> str:
