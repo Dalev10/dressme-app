@@ -240,6 +240,41 @@ public class ClothingServiceImpl implements ClothingService {
 
         audit.setPredictedCategory(category);
         audit.setPredictedStyle(style);
+
+        // Color correction
+        if (request.colorId() != null) {
+            colorRepository.findById(request.colorId())
+                    .ifPresent(audit::setPredictedColor);
+        }
+
+        // Occasion correction — delete-all + insert-new (same pattern as applyAiAudit)
+        if (request.occasionIds() != null && !request.occasionIds().isEmpty()) {
+            clothingOccasionRepository.deleteByClothingId(clothing.getId());
+            for (UUID occasionId : request.occasionIds()) {
+                occasionRepository.findById(occasionId).ifPresent(occasion ->
+                    clothingOccasionRepository.save(
+                        ClothingOccasion.builder().clothing(clothing).occasion(occasion).build()
+                    )
+                );
+            }
+            occasionRepository.findById(request.occasionIds().get(0))
+                    .ifPresent(audit::setPredictedOccasion);
+        }
+
+        // Weather correction — delete-all + insert-new (same pattern as applyAiAudit)
+        if (request.weatherIds() != null && !request.weatherIds().isEmpty()) {
+            clothingWeatherRepository.deleteByClothingId(clothing.getId());
+            for (UUID weatherId : request.weatherIds()) {
+                weatherRepository.findById(weatherId).ifPresent(weather ->
+                    clothingWeatherRepository.save(
+                        ClothingWeather.builder().clothing(clothing).weather(weather).build()
+                    )
+                );
+            }
+            weatherRepository.findById(request.weatherIds().get(0))
+                    .ifPresent(audit::setPredictedWeather);
+        }
+
         audit.setWasCorrected(true); // ← señal clave para el scoring engine
 
         // Si no había audit previo, marcar la prenda como procesada
@@ -288,9 +323,30 @@ public class ClothingServiceImpl implements ClothingService {
                                 )
                         .toList();
 
+        List<WardrobeEditCatalogDTO.ColorEntry> colors =
+                colorRepository.findAll().stream()
+                        .map(c -> new WardrobeEditCatalogDTO.ColorEntry(
+                                c.getId(), c.getName(), hslToHex(c)))
+                        .toList();
+
+        List<WardrobeEditCatalogDTO.OccasionEntry> occasions =
+                occasionRepository.findAll().stream()
+                        .map(o -> new WardrobeEditCatalogDTO.OccasionEntry(
+                                o.getId(), o.getName()))
+                        .toList();
+
+        List<WardrobeEditCatalogDTO.WeatherEntry> weathers =
+                weatherRepository.findAll().stream()
+                        .map(w -> new WardrobeEditCatalogDTO.WeatherEntry(
+                                w.getId(), w.getName()))
+                        .toList();
+
         return new WardrobeEditCatalogDTO(
                 categories,
-                styles
+                styles,
+                colors,
+                occasions,
+                weathers
         );
     }
 

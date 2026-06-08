@@ -114,7 +114,10 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
         ClothingUpdateRequest dbRequest = new ClothingUpdateRequest(
                 request.typeId(),
                 request.categoryId(),
-                request.styleId()
+                request.styleId(),
+                request.colorId(),
+                request.occasionIds(),
+                request.weatherIds()
         );
 
         return databaseClient.patch()

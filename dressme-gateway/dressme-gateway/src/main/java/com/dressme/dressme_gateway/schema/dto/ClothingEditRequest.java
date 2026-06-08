@@ -1,6 +1,7 @@
 package com.dressme.dressme_gateway.schema.dto;
 
 import jakarta.validation.constraints.NotNull;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,13 @@ public record ClothingEditRequest(
     UUID categoryId,
 
     @NotNull(message = "El estilo es obligatorio")
-    UUID styleId
+    UUID styleId,
+
+    // Optional — null means "do not change"
+    UUID colorId,
+
+    List<UUID> occasionIds,
+
+    List<UUID> weatherIds
 
 ) {}
