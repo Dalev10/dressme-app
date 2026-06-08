@@ -1,6 +1,6 @@
 import logging
 import json
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from schemas.wardrobe import VisionAnalysisRequest, VisionAnalysisResponse
@@ -32,8 +32,8 @@ router = APIRouter(
     entre prendas (complementarios, análogos, triádicos) en lugar de comparar
     solo UUIDs de color.
 
-    **Fallback:** si Gemini no puede clasificar la imagen, la prenda se asigna
-    a "Uncategorized" con confidence_score=0.0. El usuario puede corregirla manualmente.
+    **Error:** si Gemini no puede analizar la imagen, devuelve HTTP 503.
+    El backend reintenta o notifica al usuario para que corrija la prenda manualmente.
 
     Consumido exclusivamente por **dressme-back** (red interna Docker).
     """,
@@ -46,10 +46,19 @@ def analyze_clothing(
         "Router: POST /ai/wardrobe/analyze — prenda=%s", request.clothing_id
     )
 
-    result = service.analyze(request)
-    payload_json = result.model_dump_json()
-    logger.info("AI-Router: Payload enviado a dressme-back: %s", payload_json)
+    try:
+        result = service.analyze(request)
+    except Exception as e:
+        logger.error(
+            "Router: Análisis fallido para prenda %s: %s",
+            request.clothing_id, e,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Vision analysis failed for clothing {request.clothing_id}: {e}",
+        )
 
+    payload_json = result.model_dump_json()
     logger.info(
         "Router: Análisis completado — prenda=%s, categoría=%s, "
         "color=HSL(%d,%d,%d), confidence=%.4f",
@@ -60,12 +69,9 @@ def analyze_clothing(
         result.detected_color_hsl.lightness,
         result.confidence_score,
     )
-    
-    # Devolver JSON aplanado usando JSONResponse
-    payload_json = result.model_dump_json()
     logger.info("Router: Payload enviado a dressme-back: %s", payload_json)
-    
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=json.loads(payload_json)
+        content=json.loads(payload_json),
     )

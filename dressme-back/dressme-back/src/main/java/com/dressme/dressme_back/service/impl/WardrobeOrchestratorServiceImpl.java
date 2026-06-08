@@ -166,4 +166,17 @@ public class WardrobeOrchestratorServiceImpl implements WardrobeOrchestratorServ
                 .retrieve()
                 .body(WardrobeEditCatalogDTO.class);
     }
+
+    // ── Re-análisis ───────────────────────────────────────────────────────────
+
+    @Override
+    public void reanalyzeClothing(UUID clothingId) {
+        log.info("Wardrobe: Re-análisis solicitado para prenda {}", clothingId);
+        ClothingDetailResponse detail = getClothingDetail(clothingId);
+        if (Boolean.TRUE.equals(detail.isProcessed())) {
+            throw new IllegalStateException("Clothing " + clothingId + " is already processed — re-analysis not needed.");
+        }
+        log.info("Wardrobe: Disparando re-análisis IA para prenda {} — url={}", clothingId, detail.imageUrl());
+        asyncVisionService.triggerVisionAnalysis(clothingId, detail.imageUrl());
+    }
 }

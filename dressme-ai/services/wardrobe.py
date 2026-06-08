@@ -38,18 +38,9 @@ class WardrobeAnalysisService:
             request.clothing_id, request.image_url,
         )
         catalog = self._catalog.get_catalog()
-
-        try:
-            raw  = self._call_gemini(request.image_url, catalog)
-            data = self._parse_response(raw)
-            return self._build_response(request.clothing_id, data)
-        except Exception as e:
-            logger.error(
-                "WardrobeAnalysisService: Error analizando prenda %s: %s. "
-                "Aplicando fallback a 'Uncategorized'.",
-                request.clothing_id, e,
-            )
-            return self._build_uncategorized_response(request.clothing_id, catalog)
+        raw  = self._call_gemini(request.image_url, catalog)
+        data = self._parse_response(raw)
+        return self._build_response(request.clothing_id, data)
 
     def _call_gemini(self, image_url: str, catalog: CatalogData) -> str:
         logger.info("WardrobeAnalysisService: Descargando imagen desde %s", image_url)
@@ -778,27 +769,3 @@ REQUIRED JSON FORMAT
             ai_provider="gemini_vision",
         )
 
-    def _build_uncategorized_response(
-        self, clothing_id: UUID, catalog: CatalogData
-    ) -> VisionAnalysisResponse:
-        def first(entries: list[dict]) -> UUID:
-            if not entries:
-                raise RuntimeError("Catálogo vacío. Verifica el seed de dressme-database.")
-            return UUID(entries[0]["id"])
-
-        uncategorized = next(
-            (c for c in catalog.categories if c["name"].lower() == "uncategorized"), None
-        )
-        return VisionAnalysisResponse(
-            clothing_id=clothing_id,
-            predicted_category_id=UUID(uncategorized["id"]) if uncategorized else first(catalog.categories),
-            predicted_style_id=first(catalog.styles),
-            predicted_weather_ids=[first(catalog.weathers)],
-            predicted_occasion_ids=[first(catalog.occasions)],
-            detected_color_hsl=DetectedColorHSL(
-                hue=0, saturation=0, lightness=50,
-                color_catalog_id=first(catalog.colors),
-            ),
-            confidence_score=Decimal("0.0"),
-            ai_provider="gemini_vision",
-        )

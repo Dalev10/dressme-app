@@ -122,4 +122,14 @@ public class InternalWardrobeController {
         wardrobeService.deleteClothing(clothingId, userId);
         return ResponseEntity.noContent().build(); // 204
     }
+
+    // ── Re-análisis ───────────────────────────────────────────────────────────
+
+    @PostMapping("/{clothingId}/reanalyze")
+    public ResponseEntity<Void> reanalyzeClothing(
+            @PathVariable UUID clothingId) {
+        log.info("Back-Wardrobe: POST /{}/reanalyze", clothingId);
+        wardrobeService.reanalyzeClothing(clothingId);
+        return ResponseEntity.accepted().build(); // 202
+    }
 }

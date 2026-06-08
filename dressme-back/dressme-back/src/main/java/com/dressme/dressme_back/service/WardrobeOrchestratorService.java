@@ -43,4 +43,7 @@ public interface WardrobeOrchestratorService {
 
     /** Candidatos para Step 0: incluye prendas con embedding null o stale. */
     List<ClothingEmbeddingInfo> getCandidatesForOutfit(UUID userId, UUID occasionId, UUID weatherId);
+
+    /** Re-triggers AI vision analysis for a garment that was not yet processed. */
+    void reanalyzeClothing(UUID clothingId);
 }
