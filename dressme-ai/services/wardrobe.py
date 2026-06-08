@@ -712,11 +712,29 @@ REQUIRED JSON FORMAT
         if missing_color := required_color - set(data["color"].keys()):
             raise ValueError(f"Gemini omitió campos del color: {missing_color}")
 
-        for key in ("category_id", "style_id"):
+        for key in ("category_id",):  # style_id ya no es escalar
             try:
                 UUID(str(data[key]))
             except ValueError:
                 raise ValueError(f"'{data[key]}' para '{key}' no es un UUID válido.")
+
+        # Normaliza style_id: acepta string o lista, siempre guarda como lista
+        style_raw = data["style_id"]
+        if isinstance(style_raw, str):
+            style_ids = [style_raw]
+        elif isinstance(style_raw, list):
+            style_ids = style_raw
+        else:
+            raise ValueError("style_id' debe ser un UUID o lista de UUIDs.")
+
+        for uid in style_ids:
+            try:
+                UUID(str(uid))
+            except ValueError:
+                raise ValueError(f"'{uid}' en 'style_id' no es un UUID válido.")
+
+        data["style_ids"] = style_ids          # normalizado como lista
+        data["style_id"]  = style_ids[0]   
 
         for list_key in ("weather_ids", "occasion_ids"):
             if not isinstance(data[list_key], list) or len(data[list_key]) == 0:
