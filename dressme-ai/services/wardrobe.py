@@ -87,16 +87,171 @@ class WardrobeAnalysisService:
                 for e in entries
             )
 
-        return f"""You are a professional fashion analyst for a clothing recommendation app.
+        return f"""You are a strict fashion classification engine. Your job is to analyze garments with maximum precision and diversity. Lazy or repetitive classifications are WRONG.
 
-Analyze the clothing item visible in the image and return a JSON classification.
+CRITICAL RULES — VIOLATIONS WILL BREAK THE SYSTEM:
+1. Identify ONLY the main clothing item. Ignore backgrounds, models, mannequins, accessories, and packaging.
+2. You MUST use ONLY the exact "id" values from the catalogs below. NEVER invent or modify IDs.
+3. Respond ONLY with the JSON object. No markdown, no explanation, no preamble.
+4. DIVERSITY IS MANDATORY — read the anti-bias rules below before classifying.
 
-INSTRUCTIONS:
-1. Identify the main clothing item (ignore backgrounds, models, accessories).
-2. Detect the dominant color of the garment and convert it to HSL values.
-3. Select the best matching entry from EACH catalog list below.
-4. You MUST use the exact "id" values from the lists — never invent IDs.
-5. Respond ONLY with the JSON object. No markdown, no explanation.
+ANTI-BIAS RULES — READ BEFORE SELECTING ANYTHING:
+- STYLE & OCCASION MAPPING:
+You have {catalog.styles} styles and {catalog.occasions} occasions available.
+Your task is to assign ALL styles that genuinely fit the garment (not just one),
+and ALL occasions where it could realistically be worn.
+
+═══════════════════════════════════════════════════════════════
+STYLE DEFINITIONS AND THEIR VALID OCCASIONS
+═══════════════════════════════════════════════════════════════
+
+[Pure Minimalist]
+  Signature: Solid neutrals (white, black, beige, grey), zero logos, clean silhouettes, quality basics.
+  Valid occasions: Everyday, Work, Date Night, Travel, Party
+  NEVER assign to: Sport, Beach & Pool, Festival
+
+[Quiet Luxury]
+  Signature: Cashmere, silk, fine wool, tailored cuts, muted tones, no visible branding.
+  Valid occasions: Work, Formal Event, Date Night, Party, Travel
+  NEVER assign to: Sport, Beach & Pool, Festival, Outdoor
+
+[Normcore]
+  Signature: Generic basics (white tee, khakis, plain sneakers), deliberately average, anti-fashion.
+  Valid occasions: Everyday, Travel, Outdoor
+  NEVER assign to: Formal Event, Party, Work, Date Night
+
+[Skater]
+  Signature: Baggy cargo pants, skate brand hoodies, canvas shoes (Vans/DC), graphic tees.
+  Valid occasions: Everyday, Festival, Outdoor, Travel
+  NEVER assign to: Formal Event, Work, Date Night
+
+[Techwear]
+  Signature: Utility pockets, waterproof/synthetic fabrics, straps, modular layering, monochromatic palette.
+  Valid occasions: Everyday, Outdoor, Travel, Festival
+  NEVER assign to: Formal Event, Beach & Pool, Work
+
+[Hypebeast]
+  Signature: Supreme/Off-White/Jordan drops, oversized fits, loud colorblocking, visible luxury logos.
+  Valid occasions: Everyday, Party, Festival, Travel
+  NEVER assign to: Formal Event, Work, Sport, Beach & Pool
+
+[Corporate Formal]
+  Signature: Full suit with tie, dress shirt, Oxford shoes, structured briefcase silhouette.
+  Valid occasions: Work, Formal Event
+  NEVER assign to: Everyday, Sport, Festival, Beach & Pool, Outdoor, Travel
+
+[Old Money]
+  Signature: Polo shirts, boat shoes, blazers, Oxford shirts, plaid patterns, heritage brands (Barbour, Ralph Lauren).
+  Valid occasions: Work, Formal Event, Date Night, Party, Travel, Everyday
+  NEVER assign to: Sport, Festival, Beach & Pool
+
+[Boho-Chic]
+  Signature: Flowy maxi dresses/skirts, earthy prints, suede fringe, layered jewelry, wide-brim hats.
+  Valid occasions: Everyday, Party, Festival, Travel, Date Night, Beach & Pool
+  NEVER assign to: Work, Formal Event, Sport
+
+[Festival Folk]
+  Signature: Crochet tops, fringe jackets, western boots, embroidered denim, indie accessories.
+  Valid occasions: Festival, Party, Everyday, Outdoor, Travel
+  NEVER assign to: Work, Formal Event, Sport, Beach & Pool
+
+[Gym Athletic]
+  Signature: Compression leggings, seamless sports bras, dry-fit tees, training shoes, performance fabrics.
+  Valid occasions: Sport, Everyday, Outdoor, Travel
+  NEVER assign to: Formal Event, Work, Date Night, Party
+
+[Gothic Scholarly]
+  Signature: Dark wool coats, tweed blazers, turtlenecks, dark academia color palette (black, burgundy, forest green).
+  Valid occasions: Everyday, Work, Date Night, Party
+  NEVER assign to: Sport, Festival, Beach & Pool, Outdoor
+
+[Preppy Classic]
+  Signature: Argyle sweaters, pleated skirts, loafers, polos, headbands, blazers with crests.
+  Valid occasions: Work, Everyday, Date Night, Party, Travel
+  NEVER assign to: Sport, Festival, Beach & Pool
+
+[Y2K Pop]
+  Signature: Low-rise jeans, butterfly clips, metallic fabrics, baby tees, platform shoes, candy colors.
+  Valid occasions: Party, Festival, Everyday, Date Night
+  NEVER assign to: Work, Formal Event, Sport, Outdoor
+
+[90s Grunge]
+  Signature: Flannel shirts (oversized), distressed denim, combat boots, band tees, fishnet layers.
+  Valid occasions: Everyday, Party, Festival, Outdoor
+  NEVER assign to: Work, Formal Event, Date Night, Sport
+
+[Prairie Romantic]
+  Signature: Puffed sleeves, floral linen/cotton, lace trim, cottagecore silhouettes, mary jane shoes.
+  Valid occasions: Everyday, Date Night, Party, Travel, Festival, Outdoor
+  NEVER assign to: Work, Sport, Formal Event
+
+[Smart Corporate]
+  Signature: Unstructured blazers, chinos, turtlenecks, loafers or clean derbies — business casual without a tie.
+  Valid occasions: Work, Date Night, Party, Travel, Everyday
+  NEVER assign to: Sport, Festival, Beach & Pool
+
+[Linen Breeze]
+  Signature: Linen shirts/pants, nautical stripes, espadrilles, resort-wear silhouettes, breathable fabrics.
+  Valid occasions: Everyday, Travel, Beach & Pool, Party, Outdoor, Date Night
+  NEVER assign to: Formal Event, Work, Sport
+
+[Punk Rock]
+  Signature: Studded leather jackets, ripped black denim, band tees, safety pins, Dr. Martens.
+  Valid occasions: Everyday, Party, Festival, Outdoor
+  NEVER assign to: Work, Formal Event, Sport, Beach & Pool
+
+[Cyberpunk / Dark Avant-Garde]
+  Signature: Asymmetrical silhouettes, PVC/latex textures, black holographic elements, deconstructed tailoring.
+  Valid occasions: Party, Festival, Date Night
+  NEVER assign to: Work, Formal Event, Sport, Outdoor, Everyday, Travel, Beach & Pool
+
+[Everyday Polished]
+  Signature: Fitted jeans, clean crewnecks, white sneakers, leather shoes — neat casual with zero effort showing.
+  Valid occasions: Everyday, Travel, Work (casual office), Date Night, Party, Outdoor
+  NEVER assign to: Formal Event, Sport, Beach & Pool, Festival
+
+═══════════════════════════════════════════════════════════════
+ASSIGNMENT RULES
+═══════════════════════════════════════════════════════════════
+
+1. MULTI-ASSIGN MANDATORY: A single garment MUST receive multiple styles and multiple occasions
+   if its physical attributes genuinely match them. Never collapse to one.
+
+2. GARMENT DRIVES THE DECISION: Base assignment entirely on fabric, silhouette, construction,
+   and visible details — not on what the user said it's "for."
+
+3. STYLE ELIMINATION FIRST: Before selecting, rule out all styles whose signature
+   clearly contradicts the garment. Assign only from what remains.
+
+4. OCCASION UNION: The final occasion list = union of valid occasions from ALL assigned styles,
+   filtered by what makes physical sense for the garment.
+
+5. HARD BOUNDARIES OVERRIDE EVERYTHING:
+   — A blazer, dress shirt, trench coat, or tailored trouser is NEVER Normcore, Skater, or Gym Athletic.
+   — A leather jacket is NEVER Corporate Formal or Quiet Luxury.
+   — Activewear (compression, dry-fit) is NEVER Formal Event or Work.
+   — A swim trunk or bikini is NEVER Work, Formal Event, or Date Night.
+   
+- WEATHER: Select ALL weather conditions this garment is genuinely suitable for. A lightweight cotton shirt fits Hot AND Mild. A wool coat fits Cold AND Mild. You MUST return at least 2 weather IDs unless the garment is extreme (heavy parka → only Cold is correct).
+- OCCASIONS: "Everyday" is ONLY for genuinely casual, unremarkable clothing worn daily (basic t-shirts, simple jeans, casual sneakers). Any garment with structure, formality, or specific function belongs to a different occasion:
+  · Blazer, dress shirt, trousers → Work, Formal Event
+  · Athletic wear, shorts, running shoes → Sport
+  · Cocktail dress, heels, suit → Formal Event, Party, Date Night
+  · Swimwear, sandals → Beach & Pool
+  · Hiking boots, cargo pants → Outdoor
+  · Sequins, bold prints → Party, Festival
+  If the garment could plausibly be worn to a specific event, include that event.
+  Returning only "Everyday" for any structured or purposeful garment is WRONG.
+- PENALIZATION: If you return "Everyday" for style on any garment that is clearly not casual, your classification is wrong. If you return only 1 weather or 1 occasion without strong justification, your classification is incomplete.
+
+STEP-BY-STEP CLASSIFICATION (reason before outputting):
+Step 1: What is the exact garment type? (blazer, hoodie, dress, etc.)
+Step 2: What is the dominant color? Convert to HSL.
+Step 3: Eliminate obviously wrong styles. Which 3+ styles clearly don't fit?
+Step 4: Which style fits BEST from the remaining options?
+Step 5: Which weather conditions genuinely apply? List all valid ones.
+Step 6: Which occasions genuinely apply? List all valid ones.
+Step 7: Output the JSON.
 
 CATALOG — CATEGORIES:
 {fmt(catalog.categories)}
@@ -107,18 +262,22 @@ CATALOG — STYLES:
 CATALOG — COLORS (choose the closest match to the detected color):
 {fmt(catalog.colors)}
 
-CATALOG — WEATHER (all suitable conditions for this garment — include every applicable option):
+CATALOG — WEATHER (ALL suitable conditions — minimum 2 unless extreme garment):
 {fmt(catalog.weathers)}
 
-CATALOG — OCCASIONS (all suitable occasions for this garment — include every applicable option):
+CATALOG — OCCASIONS (ALL suitable occasions — minimum 2):
 {fmt(catalog.occasions)}
 
-REQUIRED JSON FORMAT:
+NEGATIVE EXAMPLE — DO NOT DO THIS:
+{{"category_id": "...", "style_id": "<everyday_id>", "weather_ids": ["<mild_id>"], "occasion_ids": ["<everyday_id>"]}}
+Reason this is wrong: Everyday style on a non-casual item, only 1 weather, only 1 occasion.
+
+REQUIRED JSON FORMAT — output exactly this structure:
 {{
   "category_id":   "<uuid from CATEGORIES>",
   "style_id":      "<uuid from STYLES>",
-  "weather_ids":   ["<uuid from WEATHER>", ...],
-  "occasion_ids":  ["<uuid from OCCASIONS>", ...],
+  "weather_ids":   ["<uuid>", "<uuid>"],
+  "occasion_ids":  ["<uuid>", "<uuid>"],
   "color": {{
     "catalog_id": "<uuid from COLORS>",
     "hue":        <integer 0-360>,
@@ -126,9 +285,7 @@ REQUIRED JSON FORMAT:
     "lightness":  <integer 0-100>
   }},
   "confidence": <float 0.0-1.0>
-}}
-
-IMPORTANT: weather_ids and occasion_ids MUST be arrays, even if there is only one value."""
+}}"""
 
     def _parse_response(self, raw_text: str) -> dict:
         cleaned = re.sub(r"```(?:json)?", "", raw_text).strip()
